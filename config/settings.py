@@ -77,13 +77,13 @@ class Settings(BaseSettings):
         description="Frequency in hours to generate and upload automated database backups",
     )
 
-    # Rate Limiting & Throttling
+    # Rate Limiting & Throttling (Optimized for smooth student navigation)
     rate_limit_rate: float = Field(
-        default=1.0,
+        default=5.0,
         description="Max requests per second allowed per user before throttling",
     )
     rate_limit_burst: int = Field(
-        default=3,
+        default=15,
         description="Burst tolerance capacity for user commands",
     )
     broadcast_rate_limit: float = Field(
@@ -108,49 +108,30 @@ class Settings(BaseSettings):
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
             "Mozilla/5.0 (X11; Linux x86_64; rv:125.0) Gecko/20100101 Firefox/125.0",
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:125.0) Gecko/20100101 Firefox/125.0",
-        ]
+        ],
+        description="Rotated user agents to prevent scraper IP blocks",
     )
 
     @field_validator("admin_user_ids", mode="before")
     @classmethod
-    def parse_admin_user_ids(cls, v: Union[str, int, List[Union[str, int]]]) -> List[int]:
-        """Support comma-separated strings or integers for ADMIN_USER_IDS."""
+    def parse_admin_ids(cls, v: Union[str, List[int], int]) -> List[int]:
+        """Support comma-separated strings or integers in ADMIN_USER_IDS."""
         if isinstance(v, str):
-            v = v.strip()
-            if not v:
+            if not v.strip():
                 return []
-            return [int(x.strip()) for x in v.split(",") if x.strip()]
+            return [int(uid.strip()) for uid in v.split(",") if uid.strip().isdigit()]
         elif isinstance(v, int):
             return [v]
-        elif isinstance(v, (list, tuple)):
-            return [int(x) for x in v]
+        elif isinstance(v, list):
+            return [int(i) for i in v]
         return []
 
-    @field_validator("database_url", mode="before")
-    @classmethod
-    def resolve_db_url(cls, v: Optional[str], values) -> str:
-        """Resolve database URL from DATABASE_URL or fallback to DB_URL."""
-        if v:
-            return v
-        return "sqlite+aiosqlite:///data/study_platform.db"
-
-    @field_validator("download_dir", "backup_dir", mode="after")
-    @classmethod
-    def ensure_directories(cls, v: Path) -> Path:
-        """Ensure directories exist."""
-        v.mkdir(parents=True, exist_ok=True)
-        return v
-
     def get_effective_db_url(self) -> str:
-        """Return canonical database connection string."""
-        return self.db_url or self.database_url
-
-    def is_admin(self, user_id: int) -> bool:
-        """Check whether a given user ID is authorized as an admin."""
-        return user_id in self.admin_user_ids
+        """Resolve either DATABASE_URL or DB_URL with preference to DATABASE_URL."""
+        return self.database_url or self.db_url or "sqlite+aiosqlite:///data/study_platform.db"
 
 
 @lru_cache()
 def get_settings() -> Settings:
-    """Return a cached singleton instance of Settings."""
+    """Return cached instance of validated settings."""
     return Settings()

@@ -1,9 +1,10 @@
 """Hierarchical Drill-Down Handlers (Exam -> Subject -> Year / Type -> Materials)."""
 
 import os
+import logging
 from typing import Optional
 from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, FSInputFile, URLInputFile
+from aiogram.types import CallbackQuery, FSInputFile, URLInputFile, InlineKeyboardMarkup, InlineKeyboardButton
 from database.session import get_session
 from database.models import ExamCategory, MaterialType, StudyMaterial
 from database import crud
@@ -19,6 +20,7 @@ from bot.keyboards.inline_menus import (
     get_materials_list_keyboard,
 )
 
+logger = logging.getLogger(__name__)
 categories_router = Router(name="categories_router")
 PAGE_SIZE = 8
 
@@ -136,7 +138,7 @@ async def handle_nav_list_materials(callback: CallbackQuery, callback_data: Cate
     else:
         text = (
             f"📂 <b>{filter_desc}</b>\n"
-            f"<i>दस्तऐवज डाउनलोड करण्यासाठी खालील बटनावर टॅप करा:</i>"
+            f"<i>दस्तऐवज मिळवण्यासाठी खालील बटनावर टॅप करा:</i>"
         )
 
     if callback.message:
@@ -260,70 +262,77 @@ async def handle_material_download(
         await callback.answer("⚠️ दस्तऐवज आढळला नाही (Document not found).", show_alert=True)
         return
 
-    await callback.answer("⏳ दस्तऐवज पाठवत आहे...")
+    await callback.answer("⏳ दस्तऐवज तयार करत आहे...")
 
     caption = (
         f"📄 <b>{material.title}</b>\n"
-        f"🏛️ <b>परीक्षा:</b> {material.exam_category.value}\n"
+        f"🏛️ <b>परीक्षा:</b> #{material.exam_category.value}\n"
         f"📖 <b>विषय:</b> {material.subject}\n"
-        f"🏷️ <b>प्रकार:</b> {material.material_type.value}\n"
+        f"🏷️ <b>प्रकार:</b> #{material.material_type.value}\n"
     )
     if material.year:
         caption += f"📅 <b>वर्ष:</b> {material.year}\n"
-    caption += "\n📥 <i>अभ्यासासाठी मोफत उपलब्ध | Share with friends!</i>"
+    caption += "\n📥 <i>अभ्यासासाठी मोफत उपलब्ध | Spardha Notes Hub</i>"
 
     target_chat_id = callback.message.chat.id if callback.message else callback.from_user.id
 
     try:
         # Case 1: Cached Telegram File ID (Fastest, zero bandwidth)
         if material.telegram_file_id:
-            await bot.send_document(
-                chat_id=target_chat_id,
-                document=material.telegram_file_id,
-                caption=caption,
-            )
-            return
+            try:
+                await bot.send_document(
+                    chat_id=target_chat_id,
+                    document=material.telegram_file_id,
+                    caption=caption,
+                )
+                return
+            except Exception as e:
+                logger.warning(f"Failed sending cached telegram_file_id: {e}")
 
-        # Case 2: URL file
-        if material.file_path.startswith("http://") or material.file_path.startswith("https://"):
-            input_file = URLInputFile(material.file_path, filename=f"{material.title[:40]}.pdf")
-            sent_msg = await bot.send_document(
-                chat_id=target_chat_id,
-                document=input_file,
-                caption=caption,
-            )
-            # Cache file_id for future requests
-            if sent_msg.document:
-                async with get_session() as session:
-                    await crud.update_material_telegram_file_id(
-                        session, material_id=material.id, telegram_file_id=sent_msg.document.file_id
-                    )
-            return
-
-        # Case 3: Local file
+        # Case 2: Local file on filesystem
         if os.path.exists(material.file_path):
-            input_file = FSInputFile(material.file_path, filename=f"{material.title[:40]}.pdf")
-            sent_msg = await bot.send_document(
-                chat_id=target_chat_id,
-                document=input_file,
-                caption=caption,
-            )
-            if sent_msg.document:
-                async with get_session() as session:
-                    await crud.update_material_telegram_file_id(
-                        session, material_id=material.id, telegram_file_id=sent_msg.document.file_id
-                    )
-            return
+            try:
+                input_file = FSInputFile(material.file_path, filename=f"{material.title[:40]}.pdf")
+                sent_msg = await bot.send_document(
+                    chat_id=target_chat_id,
+                    document=input_file,
+                    caption=caption,
+                )
+                if sent_msg.document:
+                    async with get_session() as session:
+                        await crud.update_material_telegram_file_id(
+                            session, material_id=material.id, telegram_file_id=sent_msg.document.file_id
+                        )
+                return
+            except Exception as e:
+                logger.warning(f"Failed sending local file: {e}")
 
-        # Fallback: Send link
+        # Case 3: Fast & direct study card with one-click download button
+        download_buttons = [
+            [
+                InlineKeyboardButton(
+                    text="📥 अधिकृत लिंकवरून डाऊनलोड करा (Download PDF)",
+                    url=material.file_path,
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 मुख्य मेनू (Main Menu)",
+                    callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                )
+            ],
+        ]
+        
         await bot.send_message(
             chat_id=target_chat_id,
-            text=f"{caption}\n\n🔗 <a href='{material.file_path}'>येथून डाउनलोड करा (Download Link)</a>",
+            text=f"{caption}\n\n🔗 <b>PDF डाऊनलोड करण्यासाठी खालील बटनावर टॅप करा:</b>",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=download_buttons),
             disable_web_page_preview=False,
         )
 
     except Exception as e:
+        logger.error(f"Error dispatching material {material_id}: {e}")
         await bot.send_message(
             chat_id=target_chat_id,
-            text=f"⚠️ दस्तऐवज पाठवताना त्रुटी आली: {str(e)}\n🔗 <a href='{material.file_path}'>थेट लिंक वापरा</a>",
+            text=f"{caption}\n\n🔗 <a href='{material.file_path}'>येथून थेट डाउनलोड करा</a>",
         )
