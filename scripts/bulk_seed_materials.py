@@ -2,6 +2,17 @@
 
 import asyncio
 from datetime import datetime
+import os
+from pathlib import Path
+import sys
+
+# Ensure UTF-8 output on Windows
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
+# Ensure project root is in sys.path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from config.settings import get_settings
 from database.models import ExamCategory, MaterialType
 from database.session import get_session, init_db
@@ -256,9 +267,9 @@ async def seed_bulk_materials():
             else:
                 count_skipped += 1
 
-    print(f"\n✅ Bulk Ingestion Complete!")
-    print(f"   • Added: {count_added} new materials")
-    print(f"   • Skipped (Already existed): {count_skipped}")
+    print("\n[OK] Bulk Ingestion Complete!")
+    print(f"   * Added: {count_added} new materials")
+    print(f"   * Skipped (Already existed): {count_skipped}")
 
 
 if __name__ == "__main__":
