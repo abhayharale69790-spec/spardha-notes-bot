@@ -42,13 +42,19 @@ class StagingApprovalCallback(CallbackData, prefix="stg"):
     staging_id: int
 
 
-# Human-friendly labels
+# Human-friendly labels for all 10 major exam categories
 CATEGORY_LABELS = {
+    ExamCategory.UPSC.value: "🇮🇳 UPSC Civil Services (IAS / IPS)",
     ExamCategory.MPSC.value: "🏛️ MPSC (Rajyaseva / Combine)",
-    ExamCategory.POLICE_BHARTI.value: "👮 Police Bharti (पोलीस भरती)",
+    ExamCategory.POLICE_BHARTI.value: "👮 Police Bharti (महाराष्ट्र पोलीस भरती)",
+    ExamCategory.SARAL_SEVA.value: "📑 Saral Seva (तलाठी / ZP / नगर परिषद)",
+    ExamCategory.JEE.value: "⚡ JEE Main & Advanced (Engineering)",
+    ExamCategory.NEET.value: "🩺 NEET UG (Medical / MBBS)",
+    ExamCategory.BOARD_10_12.value: "🏫 10th & 12th Board (SSC / HSC)",
+    ExamCategory.NCERT.value: "📖 NCERT Textbooks (Class 6 - 12)",
     ExamCategory.BANKING.value: "🏦 Banking (IBPS / SBI / RBI)",
-    ExamCategory.SARAL_SEVA.value: "📑 Saral Seva (Talathi / ZP / Nagar Parishad)",
-    ExamCategory.GENERAL.value: "🌐 General / All Exams",
+    ExamCategory.SSC.value: "🎯 SSC (CGL / CHSL / GD / MTS)",
+    ExamCategory.GENERAL.value: "🌐 General / शासन निर्णय (GR)",
 }
 
 MATERIAL_TYPE_LABELS = {
@@ -67,17 +73,17 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
 
     builder.row(
         InlineKeyboardButton(
-            text="📚 Exam Wise Material (परीक्षानिहाय अभ्यास साहित्य)",
+            text="📚 All Exams & Material (परीक्षानिहाय अभ्यास साहित्य)",
             callback_data=CategoryNavCallback(action=NavAction.EXAMS.value).pack(),
         )
     )
     builder.row(
         InlineKeyboardButton(
-            text="📑 Latest Govt Resolutions (शासन निर्णय / GR)",
+            text="📑 Latest GRs (शासन निर्णय)",
             callback_data=CategoryNavCallback(action=NavAction.GR_FEED.value).pack(),
         ),
         InlineKeyboardButton(
-            text="📝 Previous Year Papers (PYQ)",
+            text="📝 Question Papers (PYQ)",
             callback_data=CategoryNavCallback(action=NavAction.PYQ_FEED.value).pack(),
         ),
     )
@@ -97,24 +103,113 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
 
 
 def get_categories_keyboard() -> InlineKeyboardMarkup:
-    """Build list of competitive exam categories."""
+    """Build list of competitive & academic exam categories grouped logically."""
     builder = InlineKeyboardBuilder()
 
-    for cat_enum in ExamCategory:
-        label = CATEGORY_LABELS.get(cat_enum.value, cat_enum.value)
-        builder.row(
-            InlineKeyboardButton(
-                text=label,
-                callback_data=CategoryNavCallback(
-                    action=NavAction.SELECT_CAT.value,
-                    category=cat_enum.value,
-                ).pack(),
-            )
+    # 1. Civil Services & State
+    builder.row(
+        InlineKeyboardButton(
+            text="🇮🇳 UPSC Civil Services",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.UPSC.value,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text="🏛️ MPSC (Rajyaseva)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.MPSC.value,
+            ).pack(),
+        ),
+    )
+
+    # 2. State Recruitment
+    builder.row(
+        InlineKeyboardButton(
+            text="👮 पोलीस भरती (Police)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.POLICE_BHARTI.value,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text="📑 सरळ सेवा (Talathi/ZP)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.SARAL_SEVA.value,
+            ).pack(),
+        ),
+    )
+
+    # 3. National Engineering & Medical
+    builder.row(
+        InlineKeyboardButton(
+            text="⚡ JEE Main & Advanced",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.JEE.value,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text="🩺 NEET UG (Medical)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.NEET.value,
+            ).pack(),
+        ),
+    )
+
+    # 4. School & NCERT Foundation
+    builder.row(
+        InlineKeyboardButton(
+            text="🏫 10th & 12th Board",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.BOARD_10_12.value,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text="📖 NCERT (6th to 12th)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.NCERT.value,
+            ).pack(),
+        ),
+    )
+
+    # 5. Banking & SSC
+    builder.row(
+        InlineKeyboardButton(
+            text="🏦 Banking (IBPS/SBI)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.BANKING.value,
+            ).pack(),
+        ),
+        InlineKeyboardButton(
+            text="🎯 SSC (CGL/CHSL)",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.SSC.value,
+            ).pack(),
+        ),
+    )
+
+    # 6. General / GR
+    builder.row(
+        InlineKeyboardButton(
+            text="🌐 शासन निर्णय (GR) व General Studies",
+            callback_data=CategoryNavCallback(
+                action=NavAction.SELECT_CAT.value,
+                category=ExamCategory.GENERAL.value,
+            ).pack(),
         )
+    )
 
     builder.row(
         InlineKeyboardButton(
-            text="🔙 Back to Main Menu",
+            text="🔙 मुख्य मेनू (Back to Main Menu)",
             callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
         )
     )

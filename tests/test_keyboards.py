@@ -57,7 +57,8 @@ def test_main_menu_keyboard():
 def test_categories_keyboard():
     """Test category selection keyboard contains all categories and back button."""
     kb = get_categories_keyboard()
-    assert len(kb.inline_keyboard) >= len(ExamCategory) + 1
+    total_buttons = sum(len(row) for row in kb.inline_keyboard)
+    assert total_buttons >= len(ExamCategory) + 1
 
 
 def test_subjects_keyboard():

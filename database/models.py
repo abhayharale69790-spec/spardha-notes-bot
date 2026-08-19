@@ -20,12 +20,27 @@ class Base(DeclarativeBase):
 
 
 class ExamCategory(str, enum.Enum):
-    """Target competitive exam category classification."""
-    MPSC = "MPSC"
-    POLICE_BHARTI = "POLICE_BHARTI"
-    BANKING = "BANKING"
-    SARAL_SEVA = "SARAL_SEVA"
-    GENERAL = "GENERAL"
+    """Target competitive & academic exam category classification."""
+    # 1. Civil Services & State Exams
+    UPSC = "UPSC"                          # UPSC Civil Services (IAS / IPS / IFS)
+    MPSC = "MPSC"                          # MPSC (Rajyaseva & Combine Group B/C)
+    POLICE_BHARTI = "POLICE_BHARTI"        # Maharashtra Police Bharti
+    SARAL_SEVA = "SARAL_SEVA"              # Saral Seva (Talathi / ZP / Nagar Parishad)
+
+    # 2. National Engineering & Medical
+    JEE = "JEE"                            # JEE Main & Advanced (Engineering)
+    NEET = "NEET"                          # NEET UG (Medical)
+
+    # 3. School & Foundation
+    BOARD_10_12 = "BOARD_10_12"            # 10th & 12th Board (SSC & HSC)
+    NCERT = "NCERT"                        # NCERT Textbooks & Solutions (Class 6 - 12)
+
+    # 4. Banking & Staff Selection
+    BANKING = "BANKING"                    # IBPS / SBI / RBI
+    SSC = "SSC"                            # SSC (CGL / CHSL / GD / MTS)
+
+    # 5. General & Government Resolutions
+    GENERAL = "GENERAL"                    # General Studies / GRs / All Exams
 
 
 class MaterialType(str, enum.Enum):
@@ -99,7 +114,7 @@ class StagingQueue(Base):
     title: Mapped[str] = mapped_column(String(500), nullable=False)
     source_url: Mapped[str] = mapped_column(String(1000), nullable=False, unique=True, index=True)
     pdf_url: Mapped[str] = mapped_column(String(1000), nullable=False)
-    extracted_summary: Mapped[str] = mapped_column(Text, nullable=False)
+    extracted_summary: Mapped[Text] = mapped_column(Text, nullable=False)
     exam_category: Mapped[ExamCategory] = mapped_column(
         SAEnum(ExamCategory, native_enum=False),
         default=ExamCategory.GENERAL,

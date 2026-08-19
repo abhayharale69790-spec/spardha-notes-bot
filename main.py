@@ -22,6 +22,7 @@ from bot.bot_instance import setup_bot_and_dispatcher
 from scraper.portal_watcher import ScraperOrchestrator
 from scraper.staging_sender import StagingSender
 from workers.backup_worker import DatabaseBackupWorker
+from scripts.bulk_seed_materials import BULK_MATERIALS
 
 # Configure Structured Logging
 logging.basicConfig(
@@ -40,136 +41,8 @@ for d in ("data", "downloads", "backups"):
 
 
 # ==============================================================================
-# Verified Live Study Materials Catalog (Guaranteed Working URLs)
+# Automatic Initial Catalog Seeder (Runs automatically on cloud container boot)
 # ==============================================================================
-
-SEED_MATERIALS_CATALOG = [
-    # MPSC
-    {
-        "title": "MPSC राज्यसेवा पूर्व परीक्षा भारतीय राज्यघटना व पंचायत राज मार्गदर्शक",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "राज्यशास्त्र (Polity)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "महाराष्ट्राचा इतिहास व समाजसुधारक विशेष संदर्भ संच (MPSC Group B & C)",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "इतिहास (History)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "महाराष्ट्राचा व भारताचा समग्र भूगोल व पर्यावरण नकाशानिहाय नोट्स",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "भूगोल (Geography)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "भारतीय अर्थव्यवस्था, बँकिंग प्रणाली व अर्थसंकल्प २०२४-२५ ठळक मुद्दे",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "अर्थशास्त्र (Economics)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "MPSC सामान्य विज्ञान - भौतिकशास्त्र, रसायनशास्त्र व जीवशास्त्र Quick Revision",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "सामान्य विज्ञान (Science)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "MPSC चालू घडामोडी २०२४ (राष्ट्रीय, आंतरराष्ट्रीय व महाराष्ट्र विशेष घडामोडी)",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "चालू घडामोडी (Current Affairs)",
-        "material_type": MaterialType.CURRENT_AFFAIRS,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2024,
-    },
-    {
-        "title": "MPSC संयुक्त गट 'ब' पूर्व परीक्षा २०२३ मूळ प्रश्नपत्रिका व अंतिम उत्तरतालिका",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "मागील प्रश्नपत्रिका (PYQ)",
-        "material_type": MaterialType.PYQ,
-        "file_path": "https://mpsc.gov.in/announcements",
-        "year": 2023,
-    },
-    # Police Bharti
-    {
-        "title": "पोलीस भरती संपूर्ण अंकगणित सूत्रे, शॉर्टकट ट्रिक्स व १०० सराव प्रश्न",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "अंकगणित (Maths)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in",
-        "year": 2024,
-    },
-    {
-        "title": "पोलीस भरती बुद्धिमत्ता चाचणी - दिशा, नातेसंबंध, बैठक व्यवस्था सराव",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "बुद्धिमत्ता (Reasoning)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in",
-        "year": 2024,
-    },
-    {
-        "title": "पोलीस भरती मराठी व्याकरण - संधी, समास, अलंकार, म्हणी व शब्दसंग्रह",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "मराठी व्याकरण (Marathi)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in",
-        "year": 2024,
-    },
-    {
-        "title": "मुंबई व महाराष्ट्र पोलीस शिपाई भरती सराव प्रश्नसंच व स्पष्टीकरण",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "सराव पेपर (Practice Papers)",
-        "material_type": MaterialType.PYQ,
-        "file_path": "https://mahapolice.gov.in",
-        "year": 2023,
-    },
-    # Saral Seva
-    {
-        "title": "तलाठी भरती TCS / IBPS पॅटर्न संभाव्य सराव प्रश्नसंच व उत्तरतालिका",
-        "exam_category": ExamCategory.SARAL_SEVA,
-        "subject": "तलाठी सराव संच (Talathi PYQ)",
-        "material_type": MaterialType.TEST_PAPER,
-        "file_path": "https://mahabhumi.gov.in/mahabhumilink",
-        "year": 2024,
-    },
-    {
-        "title": "सरळ सेवा भरती - महाराष्ट्र सामान्य ज्ञान व चालू घडामोडी ५०० वन लाइनर नोट्स",
-        "exam_category": ExamCategory.SARAL_SEVA,
-        "subject": "सामान्य ज्ञान (GK)",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahabhumi.gov.in/mahabhumilink",
-        "year": 2024,
-    },
-    # Government Resolutions (GR)
-    {
-        "title": "शासन निर्णय: महाराष्ट्र शासकीय नोकरभरती परीक्षा पद्धती व नवीन मार्गदर्शक सूचना २०२४",
-        "exam_category": ExamCategory.GENERAL,
-        "subject": "शासन निर्णय (GR)",
-        "material_type": MaterialType.GR,
-        "file_path": "https://www.maharashtra.gov.in/1145/Government-Resolutions",
-        "year": 2024,
-    },
-    {
-        "title": "शासन निर्णय: स्पर्धा परीक्षांसाठी वयोमर्यादा शिथिलीकरण व समांतर आरक्षण नियमावली",
-        "exam_category": ExamCategory.GENERAL,
-        "subject": "शासन निर्णय (GR)",
-        "material_type": MaterialType.GR,
-        "file_path": "https://www.maharashtra.gov.in/1145/Government-Resolutions",
-        "year": 2024,
-    },
-]
-
 
 async def auto_seed_catalog_if_empty() -> None:
     """Ensure database is automatically pre-populated with study materials on boot."""
@@ -179,9 +52,9 @@ async def auto_seed_catalog_if_empty() -> None:
             result = await session.execute(stmt)
             count = result.scalar_one_or_none() or 0
 
-            if count < 5:
+            if count < len(BULK_MATERIALS):
                 logger.info(f"Database contains {count} items. Auto-seeding initial study materials catalog...")
-                for item in SEED_MATERIALS_CATALOG:
+                for item in BULK_MATERIALS:
                     is_known = await crud.is_url_already_known(session, item["file_path"], item["title"])
                     if not is_known:
                         await crud.create_study_material(
@@ -195,7 +68,7 @@ async def auto_seed_catalog_if_empty() -> None:
                         )
                 logger.info("Automatic catalog auto-seeding completed successfully!")
             else:
-                logger.info(f"Database already populated with {count} study materials.")
+                logger.info(f"Database fully populated with {count} study materials.")
     except Exception as e:
         logger.error(f"Auto-seed catalog error: {e}", exc_info=True)
 
@@ -211,7 +84,7 @@ async def handle_root(request: web.Request) -> web.Response:
             "status": "online",
             "service": "Telegram Study Platform & Document Distribution Engine",
             "bot": "@SpardhaNotes_bot",
-            "version": "2.0.0",
+            "version": "2.2.0",
             "mode": request.app.get("bot_mode", "webhook"),
             "uptime_utc": datetime.now(timezone.utc).isoformat(),
         }
@@ -332,7 +205,7 @@ async def run_scraper_scheduler(bot: Bot, stop_event: asyncio.Event) -> None:
 
 async def main() -> None:
     """Bootstrap web server, database, webhook registration, and workers."""
-    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.1 Production)...")
+    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.2 Production)...")
 
     # 1. Configure Telegram Bot and Dispatcher
     bot, dp = setup_bot_and_dispatcher()

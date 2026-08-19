@@ -33,27 +33,57 @@ def get_categories_keyboard(upload_id: str) -> InlineKeyboardMarkup:
     buttons = [
         [
             InlineKeyboardButton(
-                text="📚 MPSC",
+                text="🇮🇳 UPSC",
+                callback_data=AdminUploadCallback(step="cat", category="upsc", uid=upload_id).pack(),
+            ),
+            InlineKeyboardButton(
+                text="🏛️ MPSC",
                 callback_data=AdminUploadCallback(step="cat", category="mpsc", uid=upload_id).pack(),
             ),
+        ],
+        [
             InlineKeyboardButton(
                 text="👮 पोलीस भरती",
                 callback_data=AdminUploadCallback(step="cat", category="police", uid=upload_id).pack(),
             ),
-        ],
-        [
             InlineKeyboardButton(
-                text="🏛️ सरळ सेवा (Talathi/ZP)",
+                text="📑 सरळ सेवा (Talathi/ZP)",
                 callback_data=AdminUploadCallback(step="cat", category="saral", uid=upload_id).pack(),
             ),
+        ],
+        [
             InlineKeyboardButton(
-                text="🏦 Banking / SSC",
-                callback_data=AdminUploadCallback(step="cat", category="bank", uid=upload_id).pack(),
+                text="⚡ JEE (Main & Adv)",
+                callback_data=AdminUploadCallback(step="cat", category="jee", uid=upload_id).pack(),
+            ),
+            InlineKeyboardButton(
+                text="🩺 NEET UG",
+                callback_data=AdminUploadCallback(step="cat", category="neet", uid=upload_id).pack(),
             ),
         ],
         [
             InlineKeyboardButton(
-                text="📑 शासन निर्णय (GR)",
+                text="🏫 10th & 12th Board",
+                callback_data=AdminUploadCallback(step="cat", category="board", uid=upload_id).pack(),
+            ),
+            InlineKeyboardButton(
+                text="📖 NCERT (6th-12th)",
+                callback_data=AdminUploadCallback(step="cat", category="ncert", uid=upload_id).pack(),
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🏦 Banking",
+                callback_data=AdminUploadCallback(step="cat", category="bank", uid=upload_id).pack(),
+            ),
+            InlineKeyboardButton(
+                text="🎯 SSC (CGL/CHSL)",
+                callback_data=AdminUploadCallback(step="cat", category="ssc", uid=upload_id).pack(),
+            ),
+        ],
+        [
+            InlineKeyboardButton(
+                text="🌐 शासन निर्णय (GR)",
                 callback_data=AdminUploadCallback(step="cat", category="gr", uid=upload_id).pack(),
             ),
         ],
@@ -70,10 +100,16 @@ def get_categories_keyboard(upload_id: str) -> InlineKeyboardMarkup:
 def get_subjects_keyboard(category: str, upload_id: str) -> InlineKeyboardMarkup:
     """Keyboard to select Subject based on category."""
     subjects_map = {
+        "upsc": ["Prelims GS", "CSAT", "Mains GS 1-4", "Essay", "10 Years PYQ"],
         "mpsc": ["राज्यशास्त्र", "इतिहास", "भूगोल", "अर्थशास्त्र", "विज्ञान", "चालू घडामोडी", "PYQ प्रश्नपत्रिका"],
         "police": ["अंकगणित", "बुद्धिमत्ता", "मराठी व्याकरण", "पोलीस कायदे", "सराव प्रश्नसंच"],
         "saral": ["तलाठी प्रश्नसंच", "सामान्य ज्ञान", "इंग्रजी व्याकरण", "आरोग्य तांत्रिक"],
+        "jee": ["Physics Formulas", "Chemistry Notes", "Maths Tricks", "JEE PYQs"],
+        "neet": ["Biology Notes", "Chemistry PYQ", "Physics PYQ", "Mock Tests"],
+        "board": ["10th SSC Question Bank", "10th Solutions", "12th HSC Science", "12th Commerce"],
+        "ncert": ["Class 6-8 Science", "Class 9-10 Maths", "Class 11-12 Physics", "Class 11-12 Bio"],
         "bank": ["Quant", "Reasoning", "Banking Awareness", "English"],
+        "ssc": ["Quant", "Reasoning", "General Awareness", "English"],
         "gr": ["शासन निर्णय", "भरती परिपत्रक", "आरक्षण नियम"],
     }
 
@@ -231,10 +267,16 @@ async def handle_admin_upload_callbacks(
             return
 
         cat_enum_map = {
+            "upsc": ExamCategory.UPSC,
             "mpsc": ExamCategory.MPSC,
             "police": ExamCategory.POLICE_BHARTI,
             "saral": ExamCategory.SARAL_SEVA,
+            "jee": ExamCategory.JEE,
+            "neet": ExamCategory.NEET,
+            "board": ExamCategory.BOARD_10_12,
+            "ncert": ExamCategory.NCERT,
             "bank": ExamCategory.BANKING,
+            "ssc": ExamCategory.SSC,
             "gr": ExamCategory.GENERAL,
         }
         category_enum = cat_enum_map.get(cat_str, ExamCategory.GENERAL)
@@ -262,9 +304,9 @@ async def handle_admin_upload_callbacks(
                 f"📌 <b>{file_name.replace('.pdf', '').replace('_', ' ')}</b>\n\n"
                 f"📖 <b>विषय:</b> {subj}\n"
                 f"🏛️ <b>प्रवर्ग:</b> #{category_enum.value}\n\n"
-                f"#MPSC #PoliceBharti #StudyNotes #CompetitiveExams\n"
+                f"#StudyNotes #CompetitiveExams #{category_enum.value}\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🤖 बॉट वरून सर्व नोट्स मिळवण्यासाठी: @{bot_username}"
+                f"🤖 बॉट वरून सर्व मोफत साहित्य मिळवण्यासाठी: @{bot_username}"
             )
 
             try:

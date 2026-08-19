@@ -1,4 +1,4 @@
-"""Master Bulk Study Materials Ingestion Script."""
+"""Master Bulk Study Materials Ingestion Script across All Major Exam Tiers."""
 
 import asyncio
 from datetime import datetime
@@ -21,14 +21,50 @@ from database import crud
 
 BULK_MATERIALS = [
     # --------------------------------------------------------------------------
-    # 1. MPSC (Rajyaseva & Combine Group B / Group C)
+    # 1. UPSC Civil Services (IAS / IPS / IFS)
+    # --------------------------------------------------------------------------
+    {
+        "title": "UPSC Prelims GS Paper 1: मागील १० वर्षांच्या प्रश्नपत्रिकांचे विषयवार वर्गीकरण व उत्तरे",
+        "exam_category": ExamCategory.UPSC,
+        "subject": "Prelims GS",
+        "material_type": MaterialType.PYQ,
+        "file_path": "https://upsc.gov.in/examinations/previous-question-papers",
+        "year": 2024,
+    },
+    {
+        "title": "UPSC Prelims Paper 2: CSAT अंकगणित, बुद्धिमत्ता व आकलन क्षमता Quick Revision Capsule",
+        "exam_category": ExamCategory.UPSC,
+        "subject": "CSAT",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://upsc.gov.in/examinations/previous-question-papers",
+        "year": 2024,
+    },
+    {
+        "title": "UPSC Mains GS 1 to 4: समग्र अभ्यासक्रम, विषयवार संदर्भ सूची आणि आदर्श उत्तरलेखन आराखडा",
+        "exam_category": ExamCategory.UPSC,
+        "subject": "Mains GS",
+        "material_type": MaterialType.SYLLABUS,
+        "file_path": "https://upsc.gov.in/examinations/revised-syllabus-scheme",
+        "year": 2024,
+    },
+    {
+        "title": "Indian Polity & Constitution High-Yield Summary (UPSC & MPSC Special)",
+        "exam_category": ExamCategory.UPSC,
+        "subject": "Indian Polity",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://upsc.gov.in",
+        "year": 2024,
+    },
+
+    # --------------------------------------------------------------------------
+    # 2. MPSC (Rajyaseva & Combine Group B / Group C)
     # --------------------------------------------------------------------------
     {
         "title": "MPSC राज्यसेवा व संयुक्त पूर्व परीक्षा - भारतीय राज्यघटना व पंचायत राज हस्तलिखित नोट्स",
         "exam_category": ExamCategory.MPSC,
         "subject": "राज्यशास्त्र (Polity)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/uploads/MPSC_Indian_Polity_Notes_2024.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -36,7 +72,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "इतिहास (History)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/uploads/Maharashtra_History_Social_Reformers.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -44,7 +80,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "भूगोल (Geography)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/uploads/Maharashtra_Geography_Atlas.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -52,7 +88,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "अर्थशास्त्र (Economics)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/uploads/Indian_Economy_Budget_2024.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -60,7 +96,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "सामान्य विज्ञान (Science)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mpsc.gov.in/uploads/MPSC_General_Science_Revision.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -68,7 +104,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "चालू घडामोडी (Current Affairs)",
         "material_type": MaterialType.CURRENT_AFFAIRS,
-        "file_path": "https://mpsc.gov.in/uploads/Current_Affairs_Yearly_2024.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2024,
     },
     {
@@ -76,35 +112,19 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.MPSC,
         "subject": "मागील प्रश्नपत्रिका (PYQ)",
         "material_type": MaterialType.PYQ,
-        "file_path": "https://mpsc.gov.in/uploads/MPSC_Combine_Group_B_2023_Paper.pdf",
-        "year": 2023,
-    },
-    {
-        "title": "MPSC संयुक्त गट 'क' पूर्व परीक्षा २०२३ मूळ प्रश्नपत्रिका व अंतिम उत्तरतालिका",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "मागील प्रश्नपत्रिका (PYQ)",
-        "material_type": MaterialType.PYQ,
-        "file_path": "https://mpsc.gov.in/uploads/MPSC_Combine_Group_C_2023_Paper.pdf",
-        "year": 2023,
-    },
-    {
-        "title": "MPSC राज्यसेवा पूर्व परीक्षा मागील ५ वर्षांच्या प्रश्नपत्रिकांचे विश्लेषण",
-        "exam_category": ExamCategory.MPSC,
-        "subject": "मागील प्रश्नपत्रिका (PYQ)",
-        "material_type": MaterialType.PYQ,
-        "file_path": "https://mpsc.gov.in/uploads/MPSC_Rajyaseva_5Years_PYQ.pdf",
+        "file_path": "https://mpsc.gov.in/announcements",
         "year": 2023,
     },
 
     # --------------------------------------------------------------------------
-    # 2. महाराष्ट्र पोलीस भरती (Police Bharti)
+    # 3. महाराष्ट्र पोलीस भरती (Police Bharti)
     # --------------------------------------------------------------------------
     {
         "title": "पोलीस भरती संपूर्ण अंकगणित सूत्रे, शॉर्टकट ट्रिक्स व १०० सराव प्रश्न",
         "exam_category": ExamCategory.POLICE_BHARTI,
         "subject": "अंकगणित (Maths)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in/uploads/Police_Maths_Formula_Book.pdf",
+        "file_path": "https://mahapolice.gov.in",
         "year": 2024,
     },
     {
@@ -112,23 +132,15 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.POLICE_BHARTI,
         "subject": "बुद्धिमत्ता (Reasoning)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in/uploads/Police_Reasoning_Master_Book.pdf",
+        "file_path": "https://mahapolice.gov.in",
         "year": 2024,
     },
     {
-        "title": "पोलीस भरती मराठी व्याकरण - संधी, समास, अलंकार, म्हणी व समानार्थी शब्दसंग्रह",
+        "title": "पोलीस भरती मराठी व्याकरण - संधी, समास, अलंकार, म्हणी व शब्दसंग्रह",
         "exam_category": ExamCategory.POLICE_BHARTI,
         "subject": "मराठी व्याकरण (Marathi)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in/uploads/Police_Marathi_Grammar_Vocab.pdf",
-        "year": 2024,
-    },
-    {
-        "title": "महाराष्ट्र पोलीस प्रशासन, कायदे, मानवी हक्क व संगणक ज्ञान विशेष प्रश्नसंच",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "पोलीस प्रशासन व कायदे",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahapolice.gov.in/uploads/Police_Acts_and_Rules.pdf",
+        "file_path": "https://mahapolice.gov.in",
         "year": 2024,
     },
     {
@@ -136,27 +148,19 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.POLICE_BHARTI,
         "subject": "सराव पेपर (Practice Papers)",
         "material_type": MaterialType.PYQ,
-        "file_path": "https://mahapolice.gov.in/uploads/Mumbai_Police_Constable_2023.pdf",
+        "file_path": "https://mahapolice.gov.in",
         "year": 2023,
-    },
-    {
-        "title": "महाराष्ट्र पोलीस भरती १०० गुणांचे १० आदर्श सराव प्रश्नसंच (OMR Answer Sheet सह)",
-        "exam_category": ExamCategory.POLICE_BHARTI,
-        "subject": "सराव पेपर (Practice Papers)",
-        "material_type": MaterialType.TEST_PAPER,
-        "file_path": "https://mahapolice.gov.in/uploads/Police_Bharti_10_Model_Papers.pdf",
-        "year": 2024,
     },
 
     # --------------------------------------------------------------------------
-    # 3. सरळ सेवा (Saral Seva / Talathi / ZP / Nagar Parishad)
+    # 4. सरळ सेवा (Saral Seva / Talathi / ZP / Nagar Parishad)
     # --------------------------------------------------------------------------
     {
-        "title": "तलाठी भरती TCS / IBPS पॅटर्न संभाव्य ५ सराव प्रश्नसंच (स्पष्टीकरणासह)",
+        "title": "तलाठी भरती TCS / IBPS पॅटर्न संभाव्य सराव प्रश्नसंच व उत्तरतालिका",
         "exam_category": ExamCategory.SARAL_SEVA,
         "subject": "तलाठी सराव संच (Talathi PYQ)",
         "material_type": MaterialType.TEST_PAPER,
-        "file_path": "https://mahabhumi.gov.in/uploads/Talathi_TCS_IBPS_Mock_Papers.pdf",
+        "file_path": "https://mahabhumi.gov.in/mahabhumilink",
         "year": 2024,
     },
     {
@@ -164,7 +168,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.SARAL_SEVA,
         "subject": "सामान्य ज्ञान (GK)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahabhumi.gov.in/uploads/Maharashtra_GK_500_OneLiners.pdf",
+        "file_path": "https://mahabhumi.gov.in/mahabhumilink",
         "year": 2024,
     },
     {
@@ -172,55 +176,203 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.SARAL_SEVA,
         "subject": "इंग्रजी व्याकरण (English)",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahabhumi.gov.in/uploads/English_Grammar_SaralSeva.pdf",
-        "year": 2024,
-    },
-    {
-        "title": "जिल्हा परिषद व आरोग्य सेवक भरती विशेष तांत्रिक प्रश्नोत्तरे व सराव संच",
-        "exam_category": ExamCategory.SARAL_SEVA,
-        "subject": "आरोग्य सेवक / ZP तांत्रिक",
-        "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://mahabhumi.gov.in/uploads/ZP_Health_Worker_Technical_Notes.pdf",
+        "file_path": "https://mahabhumi.gov.in/mahabhumilink",
         "year": 2024,
     },
 
     # --------------------------------------------------------------------------
-    # 4. बँकिंग व SSC (Banking / SSC / Railway)
+    # 5. National Engineering (JEE Main & Advanced)
     # --------------------------------------------------------------------------
     {
-        "title": "Banking Quantitative Aptitude: Arithmetic, Data Interpretation & Speed Maths",
+        "title": "JEE Main & Advanced Physics Complete Formula Compendium & Quick Revision Handbook",
+        "exam_category": ExamCategory.JEE,
+        "subject": "Physics",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://jeemain.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "JEE Chemistry: Organic Reaction Mechanisms, Inorganic Trends & Physical Chemistry Formulas",
+        "exam_category": ExamCategory.JEE,
+        "subject": "Chemistry",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://jeemain.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "JEE Mathematics: Calculus, Vectors & 3D, Algebra Short Tricks & Cheat Sheet",
+        "exam_category": ExamCategory.JEE,
+        "subject": "Mathematics",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://jeemain.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "JEE Main Past 5 Years Chapterwise Solved Question Papers (NTA Official)",
+        "exam_category": ExamCategory.JEE,
+        "subject": "JEE PYQs",
+        "material_type": MaterialType.PYQ,
+        "file_path": "https://jeemain.nta.nic.in",
+        "year": 2023,
+    },
+
+    # --------------------------------------------------------------------------
+    # 6. National Medical (NEET UG)
+    # --------------------------------------------------------------------------
+    {
+        "title": "NEET UG Biology: Complete NCERT Line-by-Line Chapterwise High-Yield Notes",
+        "exam_category": ExamCategory.NEET,
+        "subject": "Biology",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://neet.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "NEET Chemistry: Inorganic NCERT Tables, Organic Reactions & Past 10 Years PYQs",
+        "exam_category": ExamCategory.NEET,
+        "subject": "Chemistry",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://neet.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "NEET Physics: Mechanics, Electrodynamics & Optics Formulas + Conceptual Derivations",
+        "exam_category": ExamCategory.NEET,
+        "subject": "Physics",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://neet.nta.nic.in",
+        "year": 2024,
+    },
+    {
+        "title": "NEET UG 2023 Original Question Paper with Detailed Step-by-Step Solutions",
+        "exam_category": ExamCategory.NEET,
+        "subject": "NEET PYQs",
+        "material_type": MaterialType.PYQ,
+        "file_path": "https://neet.nta.nic.in",
+        "year": 2023,
+    },
+
+    # --------------------------------------------------------------------------
+    # 7. School & Foundation (10th & 12th Board - SSC / HSC)
+    # --------------------------------------------------------------------------
+    {
+        "title": "Maharashtra SSC Class 10th Mathematics & Science Official Question Bank & Solutions",
+        "exam_category": ExamCategory.BOARD_10_12,
+        "subject": "10th SSC Board",
+        "material_type": MaterialType.TEST_PAPER,
+        "file_path": "https://www.mahahsscboard.in",
+        "year": 2024,
+    },
+    {
+        "title": "Maharashtra HSC Class 12th Science: Physics, Chemistry & Biology Model Question Papers",
+        "exam_category": ExamCategory.BOARD_10_12,
+        "subject": "12th HSC Science",
+        "material_type": MaterialType.TEST_PAPER,
+        "file_path": "https://www.mahahsscboard.in",
+        "year": 2024,
+    },
+    {
+        "title": "Maharashtra HSC Class 12th Commerce: Book-Keeping, Economics & OCM Revision Notes",
+        "exam_category": ExamCategory.BOARD_10_12,
+        "subject": "12th HSC Commerce",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://www.mahahsscboard.in",
+        "year": 2024,
+    },
+
+    # --------------------------------------------------------------------------
+    # 8. NCERT Textbooks & Solutions (Class 6 to 12)
+    # --------------------------------------------------------------------------
+    {
+        "title": "NCERT Class 6 to 10 General Science Summary & Core Concepts Handbook",
+        "exam_category": ExamCategory.NCERT,
+        "subject": "NCERT Science",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ncert.nic.in/textbook.php",
+        "year": 2024,
+    },
+    {
+        "title": "NCERT Class 6 to 10 Social Science (History, Geography, Civics) Foundation Capsule",
+        "exam_category": ExamCategory.NCERT,
+        "subject": "NCERT Social Science",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ncert.nic.in/textbook.php",
+        "year": 2024,
+    },
+    {
+        "title": "NCERT Class 11 & 12 Physics, Chemistry & Biology Official Core Textbooks Guide",
+        "exam_category": ExamCategory.NCERT,
+        "subject": "NCERT Higher Secondary",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ncert.nic.in/textbook.php",
+        "year": 2024,
+    },
+
+    # --------------------------------------------------------------------------
+    # 9. Banking & Financial Sector (IBPS / SBI / RBI)
+    # --------------------------------------------------------------------------
+    {
+        "title": "Banking Quantitative Aptitude: Speed Maths, Arithmetic & Data Interpretation Guide",
         "exam_category": ExamCategory.BANKING,
         "subject": "Quantitative Aptitude",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://ibps.in/uploads/Speed_Maths_and_DI_Mastery.pdf",
+        "file_path": "https://ibps.in",
         "year": 2024,
     },
     {
-        "title": "Reasoning Ability Puzzles, Syllogism & Seating Arrangement Capsule",
+        "title": "Reasoning Ability Puzzles, Syllogism & High-Level Seating Arrangement Capsule",
         "exam_category": ExamCategory.BANKING,
         "subject": "Reasoning Ability",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://ibps.in/uploads/Reasoning_Puzzles_Bank_PO.pdf",
+        "file_path": "https://ibps.in",
         "year": 2024,
     },
     {
-        "title": "Banking Awareness, Financial Terms & RBI Monetary Policy Guidelines 2024",
+        "title": "Banking & Financial Awareness: RBI Monetary Policy & Economic Terms 2024",
         "exam_category": ExamCategory.BANKING,
         "subject": "Banking Awareness",
         "material_type": MaterialType.SHORT_NOTES,
-        "file_path": "https://ibps.in/uploads/Banking_Awareness_2024.pdf",
+        "file_path": "https://rbi.org.in",
         "year": 2024,
     },
 
     # --------------------------------------------------------------------------
-    # 5. शासन निर्णय व अधिकृत परिपत्रके (Government Resolutions - GR)
+    # 10. Staff Selection Commission (SSC CGL / CHSL / GD / MTS)
+    # --------------------------------------------------------------------------
+    {
+        "title": "SSC CGL / CHSL Quantitative Aptitude: Advanced Maths (Geometry, Mensuration, Algebra)",
+        "exam_category": ExamCategory.SSC,
+        "subject": "Quantitative Aptitude",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ssc.gov.in",
+        "year": 2024,
+    },
+    {
+        "title": "SSC General Awareness & Static GK 1000 High-Frequency Questions",
+        "exam_category": ExamCategory.SSC,
+        "subject": "General Awareness",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ssc.gov.in",
+        "year": 2024,
+    },
+    {
+        "title": "SSC English Language & Comprehension: 100 Essential Grammar Rules & Vocabulary",
+        "exam_category": ExamCategory.SSC,
+        "subject": "English",
+        "material_type": MaterialType.SHORT_NOTES,
+        "file_path": "https://ssc.gov.in",
+        "year": 2024,
+    },
+
+    # --------------------------------------------------------------------------
+    # 11. Government Resolutions & General (GR)
     # --------------------------------------------------------------------------
     {
         "title": "शासन निर्णय: महाराष्ट्र शासकीय नोकरभरती परीक्षा पद्धती व नवीन मार्गदर्शक सूचना २०२४",
         "exam_category": ExamCategory.GENERAL,
         "subject": "शासन निर्णय (GR)",
         "material_type": MaterialType.GR,
-        "file_path": "https://maharashtra.gov.in/GR_Recruitment_Rules_2024.pdf",
+        "file_path": "https://www.maharashtra.gov.in/1145/Government-Resolutions",
         "year": 2024,
     },
     {
@@ -228,15 +380,7 @@ BULK_MATERIALS = [
         "exam_category": ExamCategory.GENERAL,
         "subject": "शासन निर्णय (GR)",
         "material_type": MaterialType.GR,
-        "file_path": "https://maharashtra.gov.in/GR_Age_Relaxation_Policy.pdf",
-        "year": 2024,
-    },
-    {
-        "title": "शासन निर्णय: खेळाडू, दिव्यांग व अनाथ आरक्षण प्रमाणपत्र पडताळणी सुधारित कार्यपद्धती",
-        "exam_category": ExamCategory.GENERAL,
-        "subject": "शासन निर्णय (GR)",
-        "material_type": MaterialType.GR,
-        "file_path": "https://maharashtra.gov.in/GR_Special_Reservation_Rules.pdf",
+        "file_path": "https://www.maharashtra.gov.in/1145/Government-Resolutions",
         "year": 2024,
     },
 ]
@@ -244,7 +388,7 @@ BULK_MATERIALS = [
 
 async def seed_bulk_materials():
     """Seed all categorized materials into the database."""
-    print("Initializing database...")
+    print("Initializing database schema...")
     await init_db()
     
     count_added = 0
@@ -252,7 +396,7 @@ async def seed_bulk_materials():
 
     async with get_session() as session:
         for item in BULK_MATERIALS:
-            is_known = await crud.is_url_already_known(session, item["file_path"], item["file_path"])
+            is_known = await crud.is_url_already_known(session, item["file_path"], item["title"])
             if not is_known:
                 await crud.create_study_material(
                     session=session,
@@ -267,7 +411,7 @@ async def seed_bulk_materials():
             else:
                 count_skipped += 1
 
-    print("\n[OK] Bulk Ingestion Complete!")
+    print("\n[OK] Bulk Ingestion Complete across All Major Exam Tiers!")
     print(f"   * Added: {count_added} new materials")
     print(f"   * Skipped (Already existed): {count_skipped}")
 
