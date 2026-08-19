@@ -425,3 +425,12 @@ def get_staging_action_keyboard(staging_id: int) -> InlineKeyboardMarkup:
         ),
     )
     return builder.as_markup()
+
+
+# Aliases for consistent naming across handlers
+build_main_menu_keyboard = get_main_menu_keyboard
+build_categories_keyboard = get_categories_keyboard
+build_subjects_keyboard = get_subjects_keyboard
+build_materials_list_keyboard = get_materials_list_keyboard
+build_staging_action_keyboard = get_staging_action_keyboard
+

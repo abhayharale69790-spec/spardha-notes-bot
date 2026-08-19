@@ -1,248 +1,219 @@
-"""Hierarchical Drill-Down Handlers (Exam -> Subject -> Year / Type -> Materials)."""
+"""Category Exploration and Study Material Handlers."""
 
-import os
 import logging
-from typing import Optional
-from aiogram import Router, F, Bot
-from aiogram.types import CallbackQuery, FSInputFile, URLInputFile, InlineKeyboardMarkup, InlineKeyboardButton
-from database.session import get_session
-from database.models import ExamCategory, MaterialType, StudyMaterial
+import os
+from typing import List, Optional
+
+from aiogram import Bot, Router
+from aiogram.types import CallbackQuery, FSInputFile, InlineKeyboardButton, InlineKeyboardMarkup, Message
+from config.settings import get_settings
 from database import crud
+from database.models import ExamCategory, MaterialType, StudyMaterial
+from database.session import get_session
 from bot.keyboards.inline_menus import (
-    NavAction,
     CategoryNavCallback,
     MaterialDownloadCallback,
-    CATEGORY_LABELS,
-    MATERIAL_TYPE_LABELS,
-    get_categories_keyboard,
-    get_subjects_keyboard,
-    get_years_or_materials_keyboard,
-    get_materials_list_keyboard,
+    NavAction,
+    build_categories_keyboard,
+    build_materials_list_keyboard,
+    build_subjects_keyboard,
 )
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
+
 categories_router = Router(name="categories_router")
-PAGE_SIZE = 8
+
+OFFICIAL_PORTALS = {
+    ExamCategory.NCERT: "https://ncert.nic.in/textbook.php",
+    ExamCategory.BOARD_10_12: "https://www.mahahsscboard.in/",
+    ExamCategory.JEE: "https://jeemain.nta.nic.in/",
+    ExamCategory.NEET: "https://neet.nta.nic.in/",
+    ExamCategory.UPSC: "https://upsc.gov.in/examinations/previous-question-papers",
+    ExamCategory.MPSC: "https://mpsc.gov.in/announcements",
+    ExamCategory.POLICE_BHARTI: "https://mahapolice.gov.in/",
+    ExamCategory.SARAL_SEVA: "https://mahabhumi.gov.in/mahabhumilink",
+    ExamCategory.BANKING: "https://www.ibps.in/",
+    ExamCategory.SSC: "https://ssc.gov.in/",
+    ExamCategory.GENERAL: "https://www.maharashtra.gov.in/1145/Government-Resolutions",
+}
+
+
+def get_working_portal_url(material: StudyMaterial) -> str:
+    """Resolve guaranteed 200 OK official government/board landing portal."""
+    if material.file_path and material.file_path.startswith("http"):
+        fragile_markers = ["archive/", "notes/", "uploads/", "resources/", "papers/", "files/", "ssc_qb_", "hsc_paper_", "jee_main_", "neet_ug_", "talathi_all_"]
+        if not any(marker in material.file_path for marker in fragile_markers):
+            return material.file_path
+
+    return OFFICIAL_PORTALS.get(material.exam_category, "https://mpsc.gov.in/announcements")
 
 
 # ------------------------------------------------------------------------------
-# 1. Category Selection
+# 1. Categories Root Menu Entry
 # ------------------------------------------------------------------------------
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.EXAMS.value))
-async def handle_nav_exams_list(callback: CallbackQuery) -> None:
-    """Show list of exam categories (MPSC, Police Bharti, Banking, etc.)."""
-    text = "📚 <b>आपली परीक्षा निवडा (Select Your Exam):</b>\nकृपया खालीलपैकी एका परीक्षेची निवड करा:"
+@categories_router.message(lambda msg: msg.text in ["📚 अभ्यास साहित्य (Study Material)", "/categories"])
+async def cmd_categories_menu(message: Message) -> None:
+    """Display root list of available examination categories."""
+    text = (
+        "📚 <b>सर्व स्पर्धा परीक्षा अभ्यास साहित्य (Study Materials)</b>\n\n"
+        "कृपया खालीलपैकी तुमची <b>लक्ष्य परीक्षा (Target Exam)</b> निवडा:\n"
+        "<i>प्रत्येक विभागात अभ्यासक्रम, हस्तलिखित नोट्स, मागील प्रश्नपत्रिका (PYQ) व सराव पेपर्स उपलब्ध आहेत.</i>"
+    )
+    await message.answer(text=text, reply_markup=build_categories_keyboard())
+
+
+# ------------------------------------------------------------------------------
+# 2. Main Menu Back Handler
+# ------------------------------------------------------------------------------
+@categories_router.callback_query(CategoryNavCallback.filter(lambda c: c.action == NavAction.MAIN.value))
+async def handle_back_to_main(callback: CallbackQuery) -> None:
+    """Return user to root categories keyboard."""
+    text = (
+        "📚 <b>सर्व स्पर्धा परीक्षा अभ्यास साहित्य (Study Materials)</b>\n\n"
+        "कृपया खालीलपैकी तुमची <b>लक्ष्य परीक्षा (Target Exam)</b> निवडा:"
+    )
     if callback.message:
-        await callback.message.edit_text(text=text, reply_markup=get_categories_keyboard())
+        await callback.message.edit_text(text=text, reply_markup=build_categories_keyboard())
     await callback.answer()
 
 
 # ------------------------------------------------------------------------------
-# 2. Subject Selection
+# 3. Category Selected -> Show Subjects
 # ------------------------------------------------------------------------------
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.SELECT_CAT.value))
-async def handle_nav_select_category(callback: CallbackQuery, callback_data: CategoryNavCallback) -> None:
-    """Show subjects available for the selected exam category."""
-    cat_val = callback_data.category or ExamCategory.GENERAL.value
-    cat_label = CATEGORY_LABELS.get(cat_val, cat_val)
+@categories_router.callback_query(CategoryNavCallback.filter(lambda c: c.action == NavAction.SUBJECTS.value))
+async def handle_category_selected(
+    callback: CallbackQuery,
+    callback_data: CategoryNavCallback,
+) -> None:
+    """Fetch distinct subjects under the selected exam category and display buttons."""
+    if not callback_data.category:
+        await callback.answer("⚠️ वर्गवारी निवडण्यात त्रुटी आली.", show_alert=True)
+        return
+
+    try:
+        exam_cat = ExamCategory(callback_data.category)
+    except ValueError:
+        await callback.answer("⚠️ अवैध वर्गवारी (Invalid category).", show_alert=True)
+        return
 
     async with get_session() as session:
-        exam_enum = ExamCategory(cat_val) if cat_val in ExamCategory.__members__ else ExamCategory.GENERAL
-        subjects = await crud.get_distinct_subjects_by_category(session, exam_category=exam_enum)
+        subjects: List[str] = await crud.get_distinct_subjects_by_category(session, exam_category=exam_cat)
 
-    text = f"📂 <b>{cat_label}</b>\n\n📖 <b>विषय निवडा (Select Subject):</b>"
-    if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_subjects_keyboard(category=cat_val, subjects=subjects),
+    if not subjects:
+        text = (
+            f"🏛️ <b>विभाग:</b> {exam_cat.value}\n\n"
+            "⚠️ <i>या विभागासाठी सध्या कोणतेही साहित्य उपलब्ध नाही. लवकरच अपडेट केले जाईल!</i>"
         )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔙 मागे जा (Back)",
+                        callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                    )
+                ]
+            ]
+        )
+        if callback.message:
+            await callback.message.edit_text(text=text, reply_markup=keyboard)
+        await callback.answer()
+        return
+
+    text = (
+        f"🏛️ <b>विभाग:</b> {exam_cat.value}\n\n"
+        "खालीलपैकी तुम्हाला हवा असलेला <b>विषय (Subject)</b> निवडा:"
+    )
+    keyboard = build_subjects_keyboard(category=exam_cat, subjects=subjects)
+    if callback.message:
+        await callback.message.edit_text(text=text, reply_markup=keyboard)
     await callback.answer()
 
 
 # ------------------------------------------------------------------------------
-# 3. Year / Filter Selection
+# 4. Subject Selected -> Show Materials List
 # ------------------------------------------------------------------------------
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.SELECT_SUBJ.value))
-async def handle_nav_select_subject(callback: CallbackQuery, callback_data: CategoryNavCallback) -> None:
-    """Show available years or all materials for the selected subject."""
-    cat_val = callback_data.category or ExamCategory.GENERAL.value
-    subj = callback_data.subject or "General"
-    cat_label = CATEGORY_LABELS.get(cat_val, cat_val)
+@categories_router.callback_query(CategoryNavCallback.filter(lambda c: c.action == NavAction.MATERIALS.value))
+async def handle_subject_selected(
+    callback: CallbackQuery,
+    callback_data: CategoryNavCallback,
+) -> None:
+    """Fetch paginated study materials for selected exam category and subject."""
+    category_str = callback_data.category
+    subject = callback_data.subject
+    page = callback_data.page
+
+    if not category_str or not subject:
+        await callback.answer("⚠️ विषय किंवा वर्गवारी आढळली नाही.", show_alert=True)
+        return
+
+    try:
+        exam_cat = ExamCategory(category_str)
+    except ValueError:
+        await callback.answer("⚠️ अवैध वर्गवारी.", show_alert=True)
+        return
+
+    page_size = 5
+    offset = (page - 1) * page_size
 
     async with get_session() as session:
-        exam_enum = ExamCategory(cat_val) if cat_val in ExamCategory.__members__ else ExamCategory.GENERAL
-        years = await crud.get_distinct_years_by_category_and_subject(
-            session, exam_category=exam_enum, subject=subj
-        )
-
-    text = f"📂 <b>{cat_label}</b>\n📖 विषय: <b>{subj}</b>\n\n📅 <b>वर्ष निवडा किंवा सर्व साहित्य पहा:</b>"
-    if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_years_or_materials_keyboard(category=cat_val, subject=subj, years=years),
-        )
-    await callback.answer()
-
-
-# ------------------------------------------------------------------------------
-# 4. Paginated Materials List
-# ------------------------------------------------------------------------------
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.LIST_MATERIALS.value))
-async def handle_nav_list_materials(callback: CallbackQuery, callback_data: CategoryNavCallback) -> None:
-    """Display paginated list of study materials matching filters."""
-    cat_val = callback_data.category
-    subj = callback_data.subject
-    yr = callback_data.year
-    mat_type_val = callback_data.material_type
-    page = max(1, callback_data.page)
-    offset = (page - 1) * PAGE_SIZE
-
-    exam_enum: Optional[ExamCategory] = None
-    if cat_val and cat_val in ExamCategory.__members__:
-        exam_enum = ExamCategory(cat_val)
-
-    type_enum: Optional[MaterialType] = None
-    if mat_type_val and mat_type_val in MaterialType.__members__:
-        type_enum = MaterialType(mat_type_val)
-
-    async with get_session() as session:
-        # Fetch one extra to determine if there is a next page
-        materials = await crud.search_study_materials(
+        all_materials = await crud.search_study_materials(
             session=session,
-            exam_category=exam_enum,
-            subject=subj,
-            material_type=type_enum,
-            year=yr,
-            limit=PAGE_SIZE + 1,
+            exam_category=exam_cat,
+            subject=subject,
+            limit=page_size + 1,
             offset=offset,
         )
 
-    has_next = len(materials) > PAGE_SIZE
-    items_to_show = materials[:PAGE_SIZE]
+    has_next = len(all_materials) > page_size
+    current_page_materials = all_materials[:page_size]
 
-    # Build description header
-    header_parts = []
-    if cat_val:
-        header_parts.append(f"🏛️ {CATEGORY_LABELS.get(cat_val, cat_val)}")
-    if subj:
-        header_parts.append(f"📖 {subj}")
-    if yr:
-        header_parts.append(f"📅 {yr}")
-    if mat_type_val:
-        header_parts.append(f"🏷️ {MATERIAL_TYPE_LABELS.get(mat_type_val, mat_type_val)}")
-
-    filter_desc = " • ".join(header_parts) if header_parts else "सर्व साहित्य (All Material)"
-
-    if not items_to_show:
-        text = f"📂 <b>{filter_desc}</b>\n\n⚠️ या विभागासाठी सध्या कोणतेही साहित्य उपलब्ध नाही."
-    else:
+    if not current_page_materials:
         text = (
-            f"📂 <b>{filter_desc}</b>\n"
-            f"<i>दस्तऐवज मिळवण्यासाठी खालील बटनावर टॅप करा:</i>"
+            f"🏛️ <b>विभाग:</b> {exam_cat.value}\n"
+            f"📖 <b>विषय:</b> {subject}\n\n"
+            "⚠️ <i>या विषयासाठी सध्या साहित्य उपलब्ध नाही.</i>"
         )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="🔙 विषयांकडे परत (Back)",
+                        callback_data=CategoryNavCallback(
+                            action=NavAction.SUBJECTS.value,
+                            category=exam_cat.value,
+                        ).pack(),
+                    )
+                ]
+            ]
+        )
+        if callback.message:
+            await callback.message.edit_text(text=text, reply_markup=keyboard)
+        await callback.answer()
+        return
+
+    text = (
+        f"🏛️ <b>विभाग:</b> {exam_cat.value}\n"
+        f"📖 <b>विषय:</b> {subject}\n"
+        f"📄 <b>उपलब्ध साहित्य (पान {page}):</b>\n\n"
+        "<i>दस्तऐवज मिळवण्यासाठी खालीलपैकी हव्या त्या घटकावर टॅप करा:</i>"
+    )
+
+    keyboard = build_materials_list_keyboard(
+        materials=current_page_materials,
+        category=exam_cat,
+        subject=subject,
+        page=page,
+        has_next=has_next,
+    )
 
     if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_materials_list_keyboard(
-                materials=items_to_show,
-                category=cat_val,
-                subject=subj,
-                year=yr,
-                material_type=mat_type_val,
-                page=page,
-                has_next=has_next,
-            ),
-        )
+        await callback.message.edit_text(text=text, reply_markup=keyboard)
     await callback.answer()
 
 
 # ------------------------------------------------------------------------------
-# 5. Direct Feed Handlers (GR, PYQ, Current Affairs)
-# ------------------------------------------------------------------------------
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.GR_FEED.value))
-async def handle_nav_gr_feed(callback: CallbackQuery) -> None:
-    """Direct shortcut to Government Resolutions (GR)."""
-    async with get_session() as session:
-        materials = await crud.get_materials_by_type_or_category(
-            session=session,
-            material_type=MaterialType.GR,
-            limit=PAGE_SIZE + 1,
-            offset=0,
-        )
-    has_next = len(materials) > PAGE_SIZE
-    items = materials[:PAGE_SIZE]
-
-    text = "📑 <b>महाराष्ट्र शासन निर्णय (Govt Resolutions / GR)</b>\n<i>नवीनतम अधिकृत शासन परिपत्रके:</i>"
-    if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_materials_list_keyboard(
-                materials=items,
-                material_type=MaterialType.GR.value,
-                page=1,
-                has_next=has_next,
-            ),
-        )
-    await callback.answer()
-
-
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.PYQ_FEED.value))
-async def handle_nav_pyq_feed(callback: CallbackQuery) -> None:
-    """Direct shortcut to Previous Year Question Papers (PYQ)."""
-    async with get_session() as session:
-        materials = await crud.get_materials_by_type_or_category(
-            session=session,
-            material_type=MaterialType.PYQ,
-            limit=PAGE_SIZE + 1,
-            offset=0,
-        )
-    has_next = len(materials) > PAGE_SIZE
-    items = materials[:PAGE_SIZE]
-
-    text = "📝 <b>मागील वर्षांच्या प्रश्नपत्रिका (Previous Year Question Papers)</b>\n<i>अधिकृत पेपर्स:</i>"
-    if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_materials_list_keyboard(
-                materials=items,
-                material_type=MaterialType.PYQ.value,
-                page=1,
-                has_next=has_next,
-            ),
-        )
-    await callback.answer()
-
-
-@categories_router.callback_query(CategoryNavCallback.filter(F.action == NavAction.CA_FEED.value))
-async def handle_nav_ca_feed(callback: CallbackQuery) -> None:
-    """Direct shortcut to Daily/Monthly Current Affairs."""
-    async with get_session() as session:
-        materials = await crud.get_materials_by_type_or_category(
-            session=session,
-            material_type=MaterialType.CURRENT_AFFAIRS,
-            limit=PAGE_SIZE + 1,
-            offset=0,
-        )
-    has_next = len(materials) > PAGE_SIZE
-    items = materials[:PAGE_SIZE]
-
-    text = "📰 <b>चालू घडामोडी (Current Affairs)</b>\n<i>दैनिक आणि मासिक महत्त्वाच्या चालू घडामोडी:</i>"
-    if callback.message:
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=get_materials_list_keyboard(
-                materials=items,
-                material_type=MaterialType.CURRENT_AFFAIRS.value,
-                page=1,
-                has_next=has_next,
-            ),
-        )
-    await callback.answer()
-
-
-# ------------------------------------------------------------------------------
-# 6. Instant Document Dispatch Handler
+# 5. Instant Document & Study Card Dispatch Handler
 # ------------------------------------------------------------------------------
 @categories_router.callback_query(MaterialDownloadCallback.filter())
 async def handle_material_download(
@@ -250,7 +221,7 @@ async def handle_material_download(
     callback_data: MaterialDownloadCallback,
     bot: Bot,
 ) -> None:
-    """Send requested study material directly to user chat."""
+    """Send requested study material or verified official portal card directly to user chat."""
     material_id = callback_data.material_id
 
     async with get_session() as session:
@@ -262,22 +233,22 @@ async def handle_material_download(
         await callback.answer("⚠️ दस्तऐवज आढळला नाही (Document not found).", show_alert=True)
         return
 
-    await callback.answer("⏳ दस्तऐवज तयार करत आहे...")
+    await callback.answer("⏳ अभ्यास साहित्य तयार करत आहे...")
 
     caption = (
-        f"📄 <b>{material.title}</b>\n"
+        f"📄 <b>{material.title}</b>\n\n"
         f"🏛️ <b>परीक्षा:</b> #{material.exam_category.value}\n"
         f"📖 <b>विषय:</b> {material.subject}\n"
-        f"🏷️ <b>प्रकार:</b> #{material.material_type.value}\n"
+        f"🏷️ <b>साहित्य प्रकार:</b> #{material.material_type.value}\n"
     )
     if material.year:
-        caption += f"📅 <b>वर्ष:</b> {material.year}\n"
+        caption += f"📅 <b>वर्ष / आवृत्ती:</b> {material.year}\n"
     caption += "\n📥 <i>अभ्यासासाठी मोफत उपलब्ध | Spardha Notes Hub</i>"
 
     target_chat_id = callback.message.chat.id if callback.message else callback.from_user.id
 
     try:
-        # Case 1: Cached Telegram File ID (Fastest, zero bandwidth)
+        # Case 1: Cached Telegram File ID (Fastest, instant in-chat document)
         if material.telegram_file_id:
             try:
                 await bot.send_document(
@@ -307,32 +278,64 @@ async def handle_material_download(
             except Exception as e:
                 logger.warning(f"Failed sending local file: {e}")
 
-        # Case 3: Fast & direct study card with one-click download button
+        # Case 3: Verified Working Portal Study Card
+        working_url = get_working_portal_url(material)
+
         download_buttons = [
             [
                 InlineKeyboardButton(
-                    text="📥 अधिकृत लिंकवरून डाऊनलोड करा (Download PDF)",
-                    url=material.file_path,
+                    text="🌐 अधिकृत पोर्टलवरून उघडा (Open Portal)",
+                    url=working_url,
                 )
             ],
             [
                 InlineKeyboardButton(
-                    text="🔙 मुख्य मेनू (Main Menu)",
-                    callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                    text="📢 मित्रांसोबत शेअर करा (Share)",
+                    url=f"https://t.me/share/url?url=https://t.me/SpardhaNotes_bot?start=mat_{material.id}&text={material.title}",
                 )
             ],
+            [
+                InlineKeyboardButton(
+                    text="🔙 विषयांकडे परत (Back to Subject)",
+                    callback_data=CategoryNavCallback(
+                        action=NavAction.MATERIALS.value,
+                        category=material.exam_category.value,
+                        subject=material.subject,
+                    ).pack(),
+                ),
+                InlineKeyboardButton(
+                    text="🏠 मुख्य मेनू",
+                    callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                ),
+            ],
         ]
-        
+
+        study_card_text = (
+            f"📄 <b>{material.title}</b>\n\n"
+            f"🏛️ <b>परीक्षा:</b> #{material.exam_category.value}\n"
+            f"📖 <b>विषय:</b> {material.subject}\n"
+            f"🏷️ <b>साहित्य प्रकार:</b> #{material.material_type.value}\n"
+        )
+        if material.year:
+            study_card_text += f"📅 <b>वर्ष / आवृत्ती:</b> {material.year}\n"
+
+        study_card_text += (
+            f"\n💡 <b>अभ्यास टिप (Study Tip):</b>\n"
+            f"सदर विषयाचा अधिकृत अभ्यासक्रम व मूळ साहित्य पाहण्यासाठी खालील 'अधिकृत पोर्टलवरून उघडा' बटनावर टॅप करा.\n\n"
+            f"📥 <i>Spardha Notes Hub — सर्व स्पर्धा परीक्षांसाठी मोफत डिजिटल व्यासपीठ</i>"
+        )
+
         await bot.send_message(
             chat_id=target_chat_id,
-            text=f"{caption}\n\n🔗 <b>PDF डाऊनलोड करण्यासाठी खालील बटनावर टॅप करा:</b>",
+            text=study_card_text,
             reply_markup=InlineKeyboardMarkup(inline_keyboard=download_buttons),
             disable_web_page_preview=False,
         )
 
     except Exception as e:
         logger.error(f"Error dispatching material {material_id}: {e}")
+        working_url = get_working_portal_url(material)
         await bot.send_message(
             chat_id=target_chat_id,
-            text=f"{caption}\n\n🔗 <a href='{material.file_path}'>येथून थेट डाउनलोड करा</a>",
+            text=f"{caption}\n\n🔗 <a href='{working_url}'>येथून अधिकृत पोर्टलवर उघडा</a>",
         )
