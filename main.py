@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 import logging
 import os
+from pathlib import Path
 import signal
 import sys
 from typing import List, Optional
@@ -28,9 +29,13 @@ logging.basicConfig(
 logger = logging.getLogger("telegram_study_platform")
 settings = get_settings()
 
+# Ensure runtime directories exist
+for d in ("data", "downloads", "backups"):
+    Path(d).mkdir(parents=True, exist_ok=True)
+
 
 # ==============================================================================
-# Lightweight AIOHTTP Web Health Server (Koyeb / Cloud Web Service Support)
+# Lightweight AIOHTTP Web Health Server (Render & Koyeb Web Service Support)
 # ==============================================================================
 
 async def handle_root(request: web.Request) -> web.Response:
@@ -47,7 +52,7 @@ async def handle_root(request: web.Request) -> web.Response:
 
 
 async def handle_health(request: web.Request) -> web.Response:
-    """Health check probe endpoint returning 200 OK for Koyeb health checks."""
+    """Health check probe endpoint returning 200 OK for Render / Koyeb."""
     return web.json_response(
         {
             "status": "healthy",
@@ -74,7 +79,7 @@ async def start_web_server(port: int) -> tuple[web.AppRunner, web.TCPSite]:
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Web Health Server listening on http://0.0.0.0:{port} (Koyeb Web Service Ready)")
+    logger.info(f"Web Health Server listening on http://0.0.0.0:{port} (Ready for Render/Koyeb probes)")
     return runner, site
 
 
@@ -112,18 +117,21 @@ async def run_scraper_scheduler(bot: Bot, stop_event: asyncio.Event) -> None:
 # ==============================================================================
 
 async def main() -> None:
-    """Bootstrap database, web health server, background workers, and bot polling."""
-    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.0 Koyeb Production)...")
+    """Bootstrap web health server, database, background workers, and bot polling."""
+    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.0 Render/Koyeb Production)...")
 
-    # 1. Initialize Database Schema
-    await init_db()
-
-    # 2. Configure Telegram Bot and Dispatcher
-    bot, dp = setup_bot_and_dispatcher()
-
-    # 3. Start Web Health Server for Koyeb (PORT environment variable)
-    port = int(os.getenv("PORT", 8000))
+    # 1. Start Web Health Server FIRST so Render/Koyeb health probes succeed immediately
+    port = int(os.getenv("PORT", 10000))
     runner, site = await start_web_server(port)
+
+    # 2. Initialize Database Schema
+    try:
+        await init_db()
+    except Exception as db_err:
+        logger.error(f"Database initialization error (will retry on next operation): {db_err}")
+
+    # 3. Configure Telegram Bot and Dispatcher
+    bot, dp = setup_bot_and_dispatcher()
 
     # 4. Setup Graceful Shutdown Coordination
     stop_event = asyncio.Event()
