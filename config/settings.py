@@ -57,6 +57,13 @@ class Settings(BaseSettings):
         description="Alternative alias for database connection string",
     )
 
+    # Gemini AI API Key for Semantic Search & Summarization
+    gemini_api_key: Optional[str] = Field(
+        default=None,
+        validation_alias="GEMINI_API_KEY",
+        description="Google AI Studio Gemini API Key for semantic embeddings and notice summarization",
+    )
+
     # Redis Connection URL (Optional for distributed caching/throttling)
     redis_url: Optional[str] = Field(
         default=None,

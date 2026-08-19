@@ -6,6 +6,8 @@ from scraper.portal_watcher import (
     MahaGRWatcher,
     PoliceBhartiWatcher,
     SaralSevaWatcher,
+    UPSCWatcher,
+    NTAWatcher,
     ScraperOrchestrator,
 )
 from scraper.staging_sender import StagingSender
@@ -17,6 +19,8 @@ __all__ = [
     "MahaGRWatcher",
     "PoliceBhartiWatcher",
     "SaralSevaWatcher",
+    "UPSCWatcher",
+    "NTAWatcher",
     "ScraperOrchestrator",
     "StagingSender",
 ]

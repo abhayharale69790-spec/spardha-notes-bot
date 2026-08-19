@@ -1,4 +1,4 @@
-"""Asynchronous CRUD Operations with RapidFuzz Bilingual Search."""
+"""Asynchronous CRUD Operations with Cloud-Native Hybrid Search."""
 
 from typing import List, Optional, Sequence, Dict
 from rapidfuzz import fuzz, process
@@ -11,6 +11,7 @@ from database.models import (
     StagingStatus,
     StudyMaterial,
 )
+from search_engine.hybrid_search import rank_hybrid_materials
 
 SYNONYM_CLUSTERS: List[List[str]] = [
     ["polity", "rajyashastra", "rajyashashtra", "राज्यशास्त्र", "राज्यघटना", "संविधान", "constitution", "governance"],
@@ -29,6 +30,13 @@ SYNONYM_CLUSTERS: List[List[str]] = [
     ["police", "police bharti", "पोलीस", "पोलीस भरती", "khaki"],
     ["talathi", "तलाठी", "saral seva", "सरळ सेवा", "zp", "जिल्हा परिषद"],
     ["rajyaseva", "राज्यसेवा", "combine", "संयुक्त पूर्व"],
+    ["upsc", "civil services", "ias", "ips", "ifs", "csat"],
+    ["jee", "jee main", "jee advanced", "engineering", "iit", "physics", "chemistry"],
+    ["neet", "neet ug", "medical", "mbbs", "bds", "biology", "botany", "zoology"],
+    ["board", "ssc 10th", "hsc 12th", "10th board", "12th board", "state board"],
+    ["ncert", "cbse", "textbook", "foundation", "class 6", "class 10", "class 12"],
+    ["banking", "ibps", "sbi", "rbi", "bank po", "bank clerk"],
+    ["ssc", "cgl", "chsl", "staff selection", "mts", "ssc gd"],
 ]
 
 
@@ -64,10 +72,6 @@ def expand_bilingual_terms(query: str) -> List[str]:
     return terms
 
 
-# ==============================================================================
-# StudyMaterial CRUD
-# ==============================================================================
-
 async def create_study_material(
     session: AsyncSession,
     title: str,
@@ -78,18 +82,18 @@ async def create_study_material(
     year: Optional[int] = None,
     telegram_file_id: Optional[str] = None,
 ) -> StudyMaterial:
-    """Create and persist a new study material record."""
+    """Insert a new verified study material into the database."""
     material = StudyMaterial(
-        title=title.strip(),
+        title=title,
         exam_category=exam_category,
-        subject=subject.strip(),
+        subject=subject,
         material_type=material_type,
-        file_path=file_path.strip(),
         year=year,
+        file_path=file_path,
         telegram_file_id=telegram_file_id,
     )
     session.add(material)
-    await session.flush()
+    await session.commit()
     await session.refresh(material)
     return material
 
@@ -98,26 +102,29 @@ async def get_study_material_by_id(
     session: AsyncSession,
     material_id: int,
 ) -> Optional[StudyMaterial]:
-    """Retrieve a single study material by ID."""
+    """Fetch single study material by primary key ID."""
     stmt = select(StudyMaterial).where(StudyMaterial.id == material_id)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def update_material_telegram_file_id(
+async def get_materials_by_type_or_category(
     session: AsyncSession,
-    material_id: int,
-    telegram_file_id: str,
-) -> Optional[StudyMaterial]:
-    """Update and cache Telegram file_id for zero-bandwidth future document delivery."""
-    stmt = (
-        update(StudyMaterial)
-        .where(StudyMaterial.id == material_id)
-        .values(telegram_file_id=telegram_file_id)
-        .returning(StudyMaterial)
-    )
+    material_type: Optional[MaterialType] = None,
+    exam_category: Optional[ExamCategory] = None,
+    limit: int = 10,
+    offset: int = 0,
+) -> Sequence[StudyMaterial]:
+    """Fetch materials filtered by type or exam category ordered by newest first."""
+    stmt = select(StudyMaterial)
+    if material_type:
+        stmt = stmt.where(StudyMaterial.material_type == material_type)
+    if exam_category:
+        stmt = stmt.where(StudyMaterial.exam_category == exam_category)
+
+    stmt = stmt.order_by(StudyMaterial.created_at.desc()).offset(offset).limit(limit)
     result = await session.execute(stmt)
-    return result.scalar_one_or_none()
+    return result.scalars().all()
 
 
 async def search_study_materials(
@@ -130,7 +137,7 @@ async def search_study_materials(
     limit: int = 20,
     offset: int = 0,
 ) -> Sequence[StudyMaterial]:
-    """Search study materials with RapidFuzz scoring and bilingual transliterations."""
+    """Search study materials with Hybrid RapidFuzz + AI Ranking."""
     if not query:
         # Standard filter query without text scoring
         stmt = select(StudyMaterial)
@@ -170,12 +177,12 @@ async def search_study_materials(
     if year:
         stmt = stmt.where(StudyMaterial.year == year)
 
-    # Fetch broader pool for fuzzy ranking
+    # Fetch broader pool for ranking
     stmt = stmt.limit(100)
     result = await session.execute(stmt)
     candidates = list(result.scalars().all())
 
-    # If DB ilike gave 0 results (e.g. typos like 'rajyashashtra' or 'politi'), fetch latest 100 in category
+    # Fallback to recent materials in category if ilike yields 0
     if not candidates:
         fallback_stmt = select(StudyMaterial)
         if exam_category:
@@ -187,33 +194,13 @@ async def search_study_materials(
     if not candidates:
         return []
 
-    # 3. RapidFuzz Scoring across candidate titles and subjects
-    scored_items = []
-    query_clean = query.strip()
+    # 3. Hybrid AI + RapidFuzz Reciprocal Rank Fusion
+    ranked = await rank_hybrid_materials(
+        query=query,
+        candidates=candidates,
+        expanded_terms=expanded_terms,
+    )
 
-    for item in candidates:
-        target_text = f"{item.title} {item.subject} {item.exam_category.value}"
-        # Compute best token set and partial ratio
-        score_direct = fuzz.token_set_ratio(query_clean, target_text)
-        score_partial = fuzz.partial_ratio(query_clean, target_text)
-
-        # Check against expanded synonym terms
-        max_syn_score = 0
-        for syn in expanded_terms[:6]:
-            s_score = fuzz.token_set_ratio(syn, target_text)
-            if s_score > max_syn_score:
-                max_syn_score = s_score
-
-        final_score = max(score_direct, score_partial, max_syn_score)
-
-        if final_score >= 45:  # Relevance threshold
-            scored_items.append((final_score, item))
-
-    # Sort descending by RapidFuzz score
-    scored_items.sort(key=lambda x: x[0], reverse=True)
-
-    # Apply offset and limit
-    ranked = [item for _, item in scored_items]
     return ranked[offset : offset + limit]
 
 
@@ -250,49 +237,76 @@ async def get_distinct_years_by_category_and_subject(
     return [row[0] for row in result.all() if row[0] is not None]
 
 
-async def get_materials_by_type_or_category(
+async def update_material_telegram_file_id(
     session: AsyncSession,
-    material_type: Optional[MaterialType] = None,
-    exam_category: Optional[ExamCategory] = None,
-    limit: int = 20,
-    offset: int = 0,
-) -> Sequence[StudyMaterial]:
-    """List materials filtered by material type or category (e.g. for GR/PYQ feeds)."""
-    stmt = select(StudyMaterial)
-    if material_type:
-        stmt = stmt.where(StudyMaterial.material_type == material_type)
-    if exam_category:
-        stmt = stmt.where(StudyMaterial.exam_category == exam_category)
-    stmt = stmt.order_by(StudyMaterial.created_at.desc()).offset(offset).limit(limit)
-    result = await session.execute(stmt)
-    return result.scalars().all()
+    material_id: int,
+    telegram_file_id: str,
+) -> Optional[StudyMaterial]:
+    """Cache Telegram file_id for instant zero-bandwidth dispatches."""
+    stmt = (
+        update(StudyMaterial)
+        .where(StudyMaterial.id == material_id)
+        .values(telegram_file_id=telegram_file_id)
+    )
+    await session.execute(stmt)
+    await session.commit()
+    return await get_study_material_by_id(session, material_id)
 
 
 # ==============================================================================
-# StagingQueue CRUD
+# Staging Queue Operations
 # ==============================================================================
 
 async def is_url_already_known(
     session: AsyncSession,
     source_url: str,
-    pdf_url: Optional[str] = None,
+    pdf_url: str,
 ) -> bool:
-    """Check if URL has already been processed in staging queue or study materials."""
-    staging_stmt = select(StagingQueue.id).where(
-        or_(
-            StagingQueue.source_url == source_url,
-            StagingQueue.pdf_url == (pdf_url or source_url),
-        )
+    """Check if document has already been processed or staged."""
+    stmt_stg = select(StagingQueue.id).where(
+        or_(StagingQueue.source_url == source_url, StagingQueue.pdf_url == pdf_url)
     )
-    staging_res = await session.execute(staging_stmt)
-    if staging_res.first() is not None:
+    res_stg = await session.execute(stmt_stg)
+    if res_stg.scalar_one_or_none():
         return True
 
-    material_stmt = select(StudyMaterial.id).where(
-        StudyMaterial.file_path == (pdf_url or source_url)
+    stmt_mat = select(StudyMaterial.id).where(
+        or_(StudyMaterial.file_path == source_url, StudyMaterial.file_path == pdf_url)
     )
-    material_res = await session.execute(material_stmt)
-    return material_res.first() is not None
+    res_mat = await session.execute(stmt_mat)
+    return res_mat.scalar_one_or_none() is not None
+
+
+async def create_staging_item(
+    session: AsyncSession,
+    title: str,
+    source_url: str,
+    pdf_url: str,
+    extracted_summary: str,
+    exam_category: ExamCategory = ExamCategory.GENERAL,
+    subject: str = "General",
+    material_type: MaterialType = MaterialType.GR,
+    year: Optional[int] = None,
+) -> Optional[StagingQueue]:
+    """Create a new staging queue draft item for admin review."""
+    if await is_url_already_known(session, source_url, pdf_url):
+        return None
+
+    item = StagingQueue(
+        title=title,
+        source_url=source_url,
+        pdf_url=pdf_url,
+        extracted_summary=extracted_summary,
+        exam_category=exam_category,
+        subject=subject,
+        material_type=material_type,
+        year=year,
+        status=StagingStatus.PENDING,
+    )
+    session.add(item)
+    await session.commit()
+    await session.refresh(item)
+    return item
 
 
 async def add_to_staging_queue(
@@ -306,32 +320,25 @@ async def add_to_staging_queue(
     material_type: MaterialType = MaterialType.GR,
     year: Optional[int] = None,
 ) -> StagingQueue:
-    """Insert a newly scraped item into the admin staging queue."""
-    item = StagingQueue(
-        title=title.strip(),
-        source_url=source_url.strip(),
-        pdf_url=pdf_url.strip(),
-        extracted_summary=extracted_summary.strip(),
+    """Add a draft item to the staging queue (creates if not exists)."""
+    item = await create_staging_item(
+        session=session,
+        title=title,
+        source_url=source_url,
+        pdf_url=pdf_url,
+        extracted_summary=extracted_summary,
         exam_category=exam_category,
-        subject=subject.strip(),
+        subject=subject,
         material_type=material_type,
         year=year,
-        status=StagingStatus.PENDING,
     )
-    session.add(item)
-    await session.flush()
-    await session.refresh(item)
+    if not item:
+        stmt = select(StagingQueue).where(
+            or_(StagingQueue.source_url == source_url, StagingQueue.pdf_url == pdf_url)
+        )
+        res = await session.execute(stmt)
+        item = res.scalar_one_or_none()
     return item
-
-
-async def get_staging_item_by_id(
-    session: AsyncSession,
-    item_id: int,
-) -> Optional[StagingQueue]:
-    """Retrieve staging queue item by ID."""
-    stmt = select(StagingQueue).where(StagingQueue.id == item_id)
-    result = await session.execute(stmt)
-    return result.scalar_one_or_none()
 
 
 async def update_staging_status(
@@ -340,31 +347,68 @@ async def update_staging_status(
     status: StagingStatus,
     staging_message_id: Optional[int] = None,
 ) -> Optional[StagingQueue]:
-    """Update staging status (APPROVED/REJECTED) and optionally link staging message ID."""
-    values = {"status": status}
-    if staging_message_id is not None:
-        values["staging_message_id"] = staging_message_id
+    """Update moderation status and message ID for a staging queue draft."""
+    stg_item = await get_staging_item_by_id(session, item_id)
+    if stg_item:
+        stg_item.status = status
+        if staging_message_id is not None:
+            stg_item.staging_message_id = staging_message_id
+        session.add(stg_item)
+        await session.commit()
+        await session.refresh(stg_item)
+    return stg_item
 
-    stmt = (
-        update(StagingQueue)
-        .where(StagingQueue.id == item_id)
-        .values(**values)
-        .returning(StagingQueue)
-    )
+
+async def get_staging_item_by_id(
+    session: AsyncSession,
+    staging_id: int,
+) -> Optional[StagingQueue]:
+    """Fetch staging item by ID."""
+    stmt = select(StagingQueue).where(StagingQueue.id == staging_id)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
 
-async def get_pending_staging_items(
+async def approve_staging_item(
     session: AsyncSession,
-    limit: int = 50,
-) -> Sequence[StagingQueue]:
-    """Retrieve pending staging drafts."""
-    stmt = (
-        select(StagingQueue)
-        .where(StagingQueue.status == StagingStatus.PENDING)
-        .order_by(StagingQueue.created_at.asc())
-        .limit(limit)
+    staging_id: int,
+    telegram_file_id: Optional[str] = None,
+) -> Optional[StudyMaterial]:
+    """Approve a staging draft and promote it to verified study material."""
+    stg_item = await get_staging_item_by_id(session, staging_id)
+    if not stg_item or stg_item.status != StagingStatus.PENDING:
+        return None
+
+    # Update staging status
+    stg_item.status = StagingStatus.APPROVED
+    session.add(stg_item)
+
+    # Promote to public StudyMaterial
+    material = StudyMaterial(
+        title=stg_item.title,
+        exam_category=stg_item.exam_category,
+        subject=stg_item.subject,
+        material_type=stg_item.material_type,
+        year=stg_item.year,
+        file_path=stg_item.pdf_url or stg_item.source_url,
+        telegram_file_id=telegram_file_id,
     )
-    result = await session.execute(stmt)
-    return result.scalars().all()
+    session.add(material)
+    await session.commit()
+    await session.refresh(material)
+    return material
+
+
+async def discard_staging_item(
+    session: AsyncSession,
+    staging_id: int,
+) -> bool:
+    """Mark a staging draft item as rejected."""
+    stg_item = await get_staging_item_by_id(session, staging_id)
+    if not stg_item or stg_item.status != StagingStatus.PENDING:
+        return False
+
+    stg_item.status = StagingStatus.REJECTED
+    session.add(stg_item)
+    await session.commit()
+    return True
