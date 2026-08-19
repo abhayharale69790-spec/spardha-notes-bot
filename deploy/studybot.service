@@ -1,0 +1,34 @@
+[Unit]
+Description=Telegram Study Platform & Automated Document Distribution Service
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/home/ubuntu/telegram_study_platform
+EnvironmentFile=/home/ubuntu/telegram_study_platform/.env
+ExecStart=/home/ubuntu/telegram_study_platform/.venv/bin/python main.py
+
+# Auto-Restart Configuration
+Restart=always
+RestartSec=10
+
+# Security and Sandbox Isolation
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/home/ubuntu/telegram_study_platform/data /home/ubuntu/telegram_study_platform/downloads
+
+# Resource limits
+LimitNOFILE=65535
+
+# Logging to standard journald
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=studybot
+
+[Install]
+WantedBy=multi-user.target

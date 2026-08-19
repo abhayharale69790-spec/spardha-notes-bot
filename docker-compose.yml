@@ -1,0 +1,77 @@
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL 16 Enterprise Database Service
+  # ----------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: studybot_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-studyuser}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-studypassword}
+      POSTGRES_DB: ${POSTGRES_DB:-studybot_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-studyuser} -d ${POSTGRES_DB:-studybot_db}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ----------------------------------------------------------------------------
+  # Redis 7 Caching and Throttling Layer
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: studybot_redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "127.0.0.1:6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Main Bot Application & Automated Scraper / Backup Engine
+  # ----------------------------------------------------------------------------
+  bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram_study_platform
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-studyuser}:${POSTGRES_PASSWORD:-studypassword}@db:5432/${POSTGRES_DB:-studybot_db}
+      - REDIS_URL=redis://redis:6379/0
+      - DOWNLOAD_DIR=/app/downloads
+      - BACKUP_DIR=/app/backups
+    volumes:
+      - ./data:/app/data
+      - ./downloads:/app/downloads
+      - ./backups:/app/backups
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+volumes:
+  postgres_data:
+  redis_data:
