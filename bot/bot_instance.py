@@ -9,6 +9,7 @@ from bot.handlers.start import start_router
 from bot.handlers.categories import categories_router
 from bot.handlers.search import search_router
 from bot.handlers.admin_staging import admin_staging_router
+from bot.handlers.admin_upload import admin_upload_router
 
 
 def create_bot(token: str) -> Bot:
@@ -37,6 +38,7 @@ def create_dispatcher() -> Dispatcher:
     dp.include_router(categories_router)
     dp.include_router(search_router)
     dp.include_router(admin_staging_router)
+    dp.include_router(admin_upload_router)
 
     return dp
 
