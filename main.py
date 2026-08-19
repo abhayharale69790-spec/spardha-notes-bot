@@ -1,4 +1,4 @@
-"""Production Multi-Task Asynchronous Application Entry Point with Web Health Server."""
+"""Production Multi-Task Asynchronous Application Entry Point (Webhook & Polling Dual-Mode)."""
 
 import asyncio
 from datetime import datetime, timezone
@@ -11,6 +11,8 @@ from typing import List, Optional
 
 from aiohttp import web
 from aiogram import Bot, Dispatcher
+from aiogram.types import Update
+import httpx
 from config.settings import get_settings
 from database.session import init_db
 from bot.bot_instance import setup_bot_and_dispatcher
@@ -35,7 +37,7 @@ for d in ("data", "downloads", "backups"):
 
 
 # ==============================================================================
-# Lightweight AIOHTTP Web Health Server (Render & Koyeb Web Service Support)
+# Lightweight AIOHTTP Web Health & Telegram Webhook Server
 # ==============================================================================
 
 async def handle_root(request: web.Request) -> web.Response:
@@ -46,6 +48,7 @@ async def handle_root(request: web.Request) -> web.Response:
             "service": "Telegram Study Platform & Document Distribution Engine",
             "bot": "@SpardhaNotes_bot",
             "version": "2.0.0",
+            "mode": request.app.get("bot_mode", "webhook"),
             "uptime_utc": datetime.now(timezone.utc).isoformat(),
         }
     )
@@ -56,7 +59,8 @@ async def handle_health(request: web.Request) -> web.Response:
     return web.json_response(
         {
             "status": "healthy",
-            "bot_polling": True,
+            "bot_active": True,
+            "mode": request.app.get("bot_mode", "webhook"),
             "scraper_active": True,
             "backup_active": True,
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -64,23 +68,69 @@ async def handle_health(request: web.Request) -> web.Response:
     )
 
 
-def create_web_app() -> web.Application:
-    """Create configured aiohttp web application with health routes."""
+async def handle_telegram_webhook(request: web.Request) -> web.Response:
+    """Process incoming Telegram updates pushed directly to the webhook endpoint."""
+    bot: Bot = request.app["bot"]
+    dp: Dispatcher = request.app["dp"]
+    try:
+        data = await request.json()
+        update = Update.model_validate(data, context={"bot": bot})
+        asyncio.create_task(dp.feed_update(bot, update))
+        return web.Response(text="OK", status=200)
+    except Exception as e:
+        logger.error(f"Webhook update processing error: {e}", exc_info=True)
+        return web.Response(text="Error", status=400)
+
+
+def create_web_app(bot: Bot, dp: Dispatcher) -> web.Application:
+    """Create configured aiohttp web application with health and webhook routes."""
     app = web.Application()
+    app["bot"] = bot
+    app["dp"] = dp
+    app["bot_mode"] = "webhook"
+
     app.router.add_get("/", handle_root)
     app.router.add_get("/health", handle_health)
+    app.router.add_post("/webhook", handle_telegram_webhook)
     return app
 
 
-async def start_web_server(port: int) -> tuple[web.AppRunner, web.TCPSite]:
+async def start_web_server(app: web.Application, port: int) -> tuple[web.AppRunner, web.TCPSite]:
     """Start asynchronous web server bound to 0.0.0.0:PORT."""
-    app = create_web_app()
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info(f"Web Health Server listening on http://0.0.0.0:{port} (Ready for Render/Koyeb probes)")
+    logger.info(f"Web Server listening on http://0.0.0.0:{port} (Webhook + Health Probe Ready)")
     return runner, site
+
+
+# ==============================================================================
+# Cloud Keep-Alive Heartbeat (Prevents Free Tier Sleep)
+# ==============================================================================
+
+async def run_self_ping_heartbeat(stop_event: asyncio.Event, port: int) -> None:
+    """Periodic task pinging self endpoint to prevent cloud sleep states."""
+    render_url = os.getenv("RENDER_EXTERNAL_URL", f"http://localhost:{port}").rstrip("/")
+    ping_url = f"{render_url}/health"
+    logger.info(f"Keep-alive heartbeat configured for: {ping_url}")
+
+    # Wait 60s before initial ping
+    await asyncio.sleep(60)
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        while not stop_event.is_set():
+            try:
+                r = await client.get(ping_url)
+                logger.info(f"Keep-alive heartbeat ping ({ping_url}) -> Status: {r.status_code}")
+            except Exception as e:
+                logger.debug(f"Keep-alive heartbeat failed: {e}")
+
+            try:
+                # Ping every 8 minutes (Render sleeps at 15 mins)
+                await asyncio.wait_for(stop_event.wait(), timeout=480)
+            except asyncio.TimeoutError:
+                pass
 
 
 # ==============================================================================
@@ -95,8 +145,8 @@ async def run_scraper_scheduler(bot: Bot, stop_event: asyncio.Event) -> None:
     interval_seconds = settings.scrape_interval_minutes * 60
     logger.info(f"Scraper scheduler active (Interval: {settings.scrape_interval_minutes}m).")
 
-    # Initial boot delay to let bot polling start smoothly
-    await asyncio.sleep(5)
+    # Initial boot delay
+    await asyncio.sleep(10)
 
     while not stop_event.is_set():
         try:
@@ -117,23 +167,30 @@ async def run_scraper_scheduler(bot: Bot, stop_event: asyncio.Event) -> None:
 # ==============================================================================
 
 async def main() -> None:
-    """Bootstrap web health server, database, background workers, and bot polling."""
-    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.0 Render/Koyeb Production)...")
+    """Bootstrap web server, database, webhook registration, and workers."""
+    logger.info("Starting Telegram Study Platform & Document Distribution Engine (v2.1 Production)...")
 
-    # 1. Start Web Health Server FIRST so Render/Koyeb health probes succeed immediately
+    # 1. Configure Telegram Bot and Dispatcher
+    bot, dp = setup_bot_and_dispatcher()
+
+    # 2. Start Web Server with Webhook Endpoint
+    app = create_web_app(bot, dp)
     port = int(os.getenv("PORT", 10000))
-    runner, site = await start_web_server(port)
+    runner, site = await start_web_server(app, port)
 
-    # 2. Initialize Database Schema
+    # 3. Initialize Database Schema
     try:
         await init_db()
     except Exception as db_err:
-        logger.error(f"Database initialization error (will retry on next operation): {db_err}")
+        logger.error(f"Database initialization error: {db_err}")
 
-    # 3. Configure Telegram Bot and Dispatcher
-    bot, dp = setup_bot_and_dispatcher()
+    # 4. Determine Deployment Mode (Webhook vs Polling)
+    render_external_url = os.getenv("RENDER_EXTERNAL_URL", "").strip().rstrip("/")
+    # Default to public Render URL if on render
+    if not render_external_url and os.getenv("RENDER"):
+        render_external_url = "https://spardha-notes-bot.onrender.com"
 
-    # 4. Setup Graceful Shutdown Coordination
+    # 5. Setup Graceful Shutdown Coordination
     stop_event = asyncio.Event()
     background_tasks: List[asyncio.Task] = []
 
@@ -145,14 +202,21 @@ async def main() -> None:
             pass
 
     try:
-        # 5. Launch Scraper Background Worker
+        # Launch Heartbeat Worker
+        heartbeat_task = asyncio.create_task(
+            run_self_ping_heartbeat(stop_event=stop_event, port=port),
+            name="heartbeat_worker",
+        )
+        background_tasks.append(heartbeat_task)
+
+        # Launch Scraper Background Worker
         scraper_task = asyncio.create_task(
             run_scraper_scheduler(bot=bot, stop_event=stop_event),
             name="scraper_scheduler_worker",
         )
         background_tasks.append(scraper_task)
 
-        # 6. Launch Automated Disaster Recovery Backup Worker
+        # Launch Disaster Recovery Backup Worker
         backup_worker = DatabaseBackupWorker(bot=bot)
         backup_task = asyncio.create_task(
             backup_worker.run_backup_scheduler(stop_event=stop_event),
@@ -160,12 +224,26 @@ async def main() -> None:
         )
         background_tasks.append(backup_task)
 
-        # 7. Start Telegram Bot Polling
-        logger.info("Starting Telegram Bot Polling (aiogram 3.x)...")
-        await dp.start_polling(
-            bot,
-            allowed_updates=dp.resolve_used_update_types(),
-        )
+        if render_external_url or os.getenv("WEBHOOK_URL"):
+            webhook_base = render_external_url or os.getenv("WEBHOOK_URL", "").rstrip("/")
+            webhook_url = f"{webhook_base}/webhook"
+            logger.info(f"Configuring Telegram Webhook: {webhook_url}")
+            await bot.set_webhook(
+                url=webhook_url,
+                drop_pending_updates=False,
+                allowed_updates=dp.resolve_used_update_types(),
+            )
+            logger.info("Telegram Webhook successfully set! Listening for incoming updates...")
+            # Keep running until stop_event is set
+            await stop_event.wait()
+        else:
+            logger.info("No WEBHOOK_URL / RENDER_EXTERNAL_URL detected. Falling back to Long Polling mode...")
+            await bot.delete_webhook(drop_pending_updates=False)
+            app["bot_mode"] = "polling"
+            await dp.start_polling(
+                bot,
+                allowed_updates=dp.resolve_used_update_types(),
+            )
 
     except (asyncio.CancelledError, KeyboardInterrupt):
         logger.info("Shutdown signal received.")
@@ -173,7 +251,6 @@ async def main() -> None:
         logger.info("Commencing graceful shutdown sequence...")
         stop_event.set()
 
-        # Stop background tasks
         for t in background_tasks:
             if not t.done():
                 t.cancel()
@@ -181,12 +258,9 @@ async def main() -> None:
         if background_tasks:
             await asyncio.gather(*background_tasks, return_exceptions=True)
 
-        # Stop Web Server
         await runner.cleanup()
-
-        # Close Bot Session
         await bot.session.close()
-        logger.info("Shutdown complete. Web server and workers cleanly terminated.")
+        logger.info("Shutdown complete.")
 
 
 if __name__ == "__main__":

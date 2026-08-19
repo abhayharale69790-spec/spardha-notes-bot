@@ -1,15 +1,18 @@
-"""Unit Tests for Koyeb Web Health Server and Cloud DB URL Normalization."""
+"""Unit Tests for Web Health Server, Telegram Webhook, and Cloud DB URL Normalization."""
 
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
+from aiogram import Bot, Dispatcher
 from main import create_web_app
 from database.session import normalize_db_url
+from bot.bot_instance import setup_bot_and_dispatcher
 
 
 @pytest.mark.asyncio
 async def test_web_app_endpoints():
     """Verify / and /health routes respond with HTTP 200 and correct JSON structure."""
-    app = create_web_app()
+    bot, dp = setup_bot_and_dispatcher()
+    app = create_web_app(bot, dp)
     server = TestServer(app)
     client = TestClient(server)
 
@@ -28,26 +31,24 @@ async def test_web_app_endpoints():
         assert resp_health.status == 200
         data_health = await resp_health.json()
         assert data_health["status"] == "healthy"
-        assert data_health["bot_polling"] is True
+        assert data_health["bot_active"] is True
         assert data_health["scraper_active"] is True
     finally:
         await client.close()
+        await bot.session.close()
 
 
 def test_cloud_db_url_normalization():
     """Verify normalization of various cloud PostgreSQL connection strings (Neon, Supabase, etc.)."""
-    # 1. Neon/Render postgres:// format with sslmode
     neon_raw = "postgres://user:secret@ep-cool-fog.us-east-2.aws.neon.tech/neondb?sslmode=require"
     neon_norm = normalize_db_url(neon_raw)
     assert neon_norm.startswith("postgresql+asyncpg://")
     assert "ssl=require" in neon_norm
 
-    # 2. Supabase postgresql:// format
     supabase_raw = "postgresql://postgres:password123@db.abcdefg.supabase.co:5432/postgres"
     supabase_norm = normalize_db_url(supabase_raw)
     assert supabase_norm.startswith("postgresql+asyncpg://")
     assert "db.abcdefg.supabase.co" in supabase_norm
 
-    # 3. SQLite format remains untouched
     sqlite_raw = "sqlite+aiosqlite:///data/study_platform.db"
     assert normalize_db_url(sqlite_raw) == sqlite_raw
