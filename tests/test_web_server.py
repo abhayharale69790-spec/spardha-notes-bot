@@ -21,10 +21,14 @@ async def test_web_app_endpoints():
         # Test GET /
         resp_root = await client.get("/")
         assert resp_root.status == 200
-        data_root = await resp_root.json()
-        assert data_root["status"] == "online"
-        assert "bot" in data_root
-        assert "version" in data_root
+        text_root = await resp_root.text()
+        assert "SpardhaNotes_bot" in text_root
+
+        # Test Catch-All route for arbitrary paths (prevents 404 errors)
+        resp_catch = await client.get("/random-nonexistent-path")
+        assert resp_catch.status == 200
+        text_catch = await resp_catch.text()
+        assert "SpardhaNotes_bot" in text_catch
 
         # Test GET /health
         resp_health = await client.get("/health")
@@ -36,6 +40,7 @@ async def test_web_app_endpoints():
     finally:
         await client.close()
         await bot.session.close()
+
 
 
 def test_cloud_db_url_normalization():

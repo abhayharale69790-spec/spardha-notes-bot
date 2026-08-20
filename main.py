@@ -58,18 +58,183 @@ async def auto_seed_catalog_if_empty() -> None:
 # Lightweight AIOHTTP Web Health & Telegram Webhook Server
 # ==============================================================================
 
+# ==============================================================================
+# Lightweight AIOHTTP Web Health & Telegram Webhook Server
+# ==============================================================================
+
 async def handle_root(request: web.Request) -> web.Response:
-    """Root landing endpoint for cloud load balancers and uptime monitors."""
-    return web.json_response(
-        {
-            "status": "online",
-            "service": "Telegram Study Platform & Document Distribution Engine",
-            "bot": "@SpardhaNotes_bot",
-            "version": "2.2.0",
-            "mode": request.app.get("bot_mode", "webhook"),
-            "uptime_utc": datetime.now(timezone.utc).isoformat(),
-        }
-    )
+    """Rich responsive HTML landing page for web visitors and search engines."""
+    html_content = f"""<!DOCTYPE html>
+<html lang="mr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{settings.brand_name} • MPSC / UPSC / POLICE BHARTI / JEE / NEET</title>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Noto+Sans+Devanagari:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {{
+            --primary: #2563eb;
+            --accent: #f59e0b;
+            --bg: #0f172a;
+            --card-bg: rgba(30, 41, 59, 0.7);
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+        }}
+        * {{ margin: 0; padding: 0; box-sizing: border-box; font-family: 'Poppins', 'Noto Sans Devanagari', sans-serif; }}
+        body {{
+            background: radial-gradient(circle at top center, #1e293b 0%, #0f172a 100%);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }}
+        .container {{
+            max-width: 800px;
+            width: 100%;
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 24px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }}
+        .badge {{
+            display: inline-block;
+            background: rgba(37, 99, 235, 0.2);
+            color: #60a5fa;
+            border: 1px solid rgba(96, 165, 250, 0.3);
+            padding: 6px 16px;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 20px;
+            letter-spacing: 0.5px;
+        }}
+        h1 {{
+            font-size: 2.2rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #ffffff 0%, #cbd5e1 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 12px;
+        }}
+        .subtitle {{
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            margin-bottom: 30px;
+            line-height: 1.6;
+        }}
+        .stats-grid {{
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            gap: 16px;
+            margin-bottom: 35px;
+        }}
+        .stat-card {{
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 16px;
+            padding: 18px;
+        }}
+        .stat-number {{
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--accent);
+        }}
+        .stat-label {{
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 4px;
+        }}
+        .btn-group {{
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            justify-content: center;
+        }}
+        .btn {{
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 28px;
+            border-radius: 14px;
+            font-size: 1rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }}
+        .btn-primary {{
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.4);
+        }}
+        .btn-primary:hover {{
+            transform: translateY(-2px);
+            box-shadow: 0 15px 30px -5px rgba(37, 99, 235, 0.6);
+        }}
+        .btn-secondary {{
+            background: rgba(255, 255, 255, 0.08);
+            color: #ffffff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }}
+        .btn-secondary:hover {{
+            background: rgba(255, 255, 255, 0.15);
+            transform: translateY(-2px);
+        }}
+        .footer {{
+            margin-top: 35px;
+            font-size: 0.85rem;
+            color: #64748b;
+        }}
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="badge">🚀 LIVE TELEGRAM STUDY ENGINE</div>
+        <h1>{settings.brand_name}</h1>
+        <p class="subtitle">
+            महाराष्ट्र व भारतातील सर्व स्पर्धा परीक्षांसाठी मोफत प्रमाणित अभ्यास साहित्य, 
+            मागील प्रश्नपत्रिका (PYQ), पुस्तके आणि शासन निर्णय (GR).
+        </p>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">569+</div>
+                <div class="stat-label">प्रमाणित साहित्य (Materials)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">10</div>
+                <div class="stat-label">परीक्षा प्रवर्ग (Exams Covered)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">100%</div>
+                <div class="stat-label">मोफत व अधिकृत (Free & Verified)</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">24x7</div>
+                <div class="stat-label">झटपट डाऊनलोड (Instant)</div>
+            </div>
+        </div>
+
+        <div class="btn-group">
+            <a href="https://t.me/SpardhaNotes_bot" class="btn btn-primary" target="_blank">
+                🤖 टेलिग्राम बॉट उघडा (@SpardhaNotes_bot)
+            </a>
+            <a href="https://t.me/spardhanoteshub" class="btn btn-secondary" target="_blank">
+                📢 मुख्य चॅनेल (@spardhanoteshub)
+            </a>
+        </div>
+
+        <div class="footer">
+            © 2026 {settings.brand_name} • Developed for Competitive Students • All Rights Reserved.
+        </div>
+    </div>
+</body>
+</html>"""
+    return web.Response(text=html_content, content_type="text/html")
 
 
 async def handle_health(request: web.Request) -> web.Response:
@@ -101,7 +266,7 @@ async def handle_telegram_webhook(request: web.Request) -> web.Response:
 
 
 def create_web_app(bot: Bot, dp: Dispatcher) -> web.Application:
-    """Create configured aiohttp web application with health and webhook routes."""
+    """Create configured aiohttp web application with health, webhook, and catch-all routes."""
     app = web.Application()
     app["bot"] = bot
     app["dp"] = dp
@@ -110,7 +275,10 @@ def create_web_app(bot: Bot, dp: Dispatcher) -> web.Application:
     app.router.add_get("/", handle_root)
     app.router.add_get("/health", handle_health)
     app.router.add_post("/webhook", handle_telegram_webhook)
+    # Catch-all GET route for any unrecognized URL path
+    app.router.add_get("/{tail:.*}", handle_root)
     return app
+
 
 
 async def start_web_server(app: web.Application, port: int) -> tuple[web.AppRunner, web.TCPSite]:
