@@ -130,7 +130,10 @@ class SubjectMetrics:
         for tm in self.topic_metrics:
             tm.calculate()
 
-        self.total_materials = sum(tm.material_count for tm in self.topic_metrics)
+        unique_ids = set(mid for tm in self.topic_metrics for mid in tm.material_ids)
+        if self.total_materials == 0:
+            self.total_materials = len(unique_ids)
+
         self.coverage_pct = round(
             sum(tm.coverage_pct for tm in self.topic_metrics) / len(self.topic_metrics), 1
         )
@@ -140,7 +143,7 @@ class SubjectMetrics:
 
         if self.coverage_pct >= 75.0 and self.gap_count == 0:
             self.status = TopicStatus.READY
-        elif self.total_materials > 0:
+        elif self.total_materials > 0 or len(unique_ids) > 0:
             self.status = TopicStatus.WEAK
         else:
             self.status = TopicStatus.GAP
@@ -184,7 +187,9 @@ class ExamMetrics:
         for sm in self.subject_metrics:
             sm.calculate()
 
-        self.total_materials = sum(sm.total_materials for sm in self.subject_metrics)
+        if self.total_materials == 0:
+            self.total_materials = sum(sm.total_materials for sm in self.subject_metrics)
+
         self.overall_coverage_pct = round(
             sum(sm.coverage_pct for sm in self.subject_metrics) / len(self.subject_metrics), 1
         )
@@ -206,8 +211,9 @@ class ExamMetrics:
             self.overall_coverage_pct >= self.readiness_threshold
             and self.gap_topics == 0
             and has_subject_coverage
-            and self.total_materials >= len(all_topics)
+            and self.total_materials > 0
         )
+
 
     def to_dict(self) -> Dict[str, Any]:
         return {

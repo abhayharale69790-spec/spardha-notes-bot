@@ -512,8 +512,8 @@ async def record_ingestion_metric(
 
 async def get_admin_dashboard_stats(session: AsyncSession) -> Dict[str, object]:
     """Aggregate high-level telemetry and metrics for the admin dashboard."""
-    # 1. Total verified materials
-    stmt_mat = select(func.count(StudyMaterial.id))
+    # 1. Total verified materials (Strict status = 'VERIFIED')
+    stmt_mat = select(func.count(StudyMaterial.id)).where(StudyMaterial.status == "VERIFIED")
     total_materials = (await session.execute(stmt_mat)).scalar() or 0
 
     # 2. Total pending staging items
@@ -538,9 +538,10 @@ async def get_admin_dashboard_stats(session: AsyncSession) -> Dict[str, object]:
     failures_count = (res_m[4] if res_m and res_m[4] else 0)
     sources_scanned = (res_m[5] if res_m and res_m[5] else 0) or 12
 
-    # 4. Breakdown by category
+    # 4. Breakdown by category for strictly VERIFIED materials
     stmt_cats = (
         select(StudyMaterial.exam_category, func.count(StudyMaterial.id))
+        .where(StudyMaterial.status == "VERIFIED")
         .group_by(StudyMaterial.exam_category)
         .order_by(func.count(StudyMaterial.id).desc())
     )
@@ -561,9 +562,10 @@ async def get_admin_dashboard_stats(session: AsyncSession) -> Dict[str, object]:
 
 
 async def get_exam_coverage_summary(session: AsyncSession) -> Dict[str, Dict[str, int]]:
-    """Return detailed material counts grouped by Exam Category and Subject."""
+    """Return detailed material counts grouped by Exam Category and Subject for verified materials."""
     stmt = (
         select(StudyMaterial.exam_category, StudyMaterial.subject, func.count(StudyMaterial.id))
+        .where(StudyMaterial.status == "VERIFIED")
         .group_by(StudyMaterial.exam_category, StudyMaterial.subject)
         .order_by(StudyMaterial.exam_category, func.count(StudyMaterial.id).desc())
     )
@@ -575,4 +577,5 @@ async def get_exam_coverage_summary(session: AsyncSession) -> Dict[str, Dict[str
             coverage[cat_key] = {}
         coverage[cat_key][subj] = cnt
     return coverage
+
 
