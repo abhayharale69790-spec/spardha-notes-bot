@@ -18,19 +18,28 @@ admin_upload_router = Router(name="admin_upload_router")
 settings = get_settings()
 
 
-@admin_upload_router.message(Command("upload"), IsAdminFilter())
+@admin_upload_router.message(Command("upload"))
 async def handle_upload_command(message: Message) -> None:
-    """Provide admin guide for uploading study material PDFs."""
+    """Provide admin guide for uploading study material PDFs, or alert non-admins."""
+    if not settings.is_admin(message.from_user.id):
+        await message.reply(
+            "⛔ <b>केवळ प्रशासकांसाठी (Admin Access Only):</b>\n\n"
+            "अभ्यास साहित्य अपलोड करण्याची सुविधा केवळ अधिकृत ॲडमिनसाठी उपलब्ध आहे."
+        )
+        return
+
     text = (
         "📤 <b>अभ्यास साहित्य अपलोड मोड (Admin Upload Mode):</b>\n\n"
         "कृपया मला थेट <b>PDF फाईल</b> पाठवा (Document स्वरूपात).\n"
         "बॉट आपोआप खालील प्रक्रिया पूर्ण करेल:\n"
-        "1️⃣ फाईलचा Telegram <code>file_id</code> कॅश करेल.\n"
-        "2️⃣ परीक्षा प्रवर्ग व विषय निवडून डेटाबेसमध्ये नोंद करेल.\n"
-        "3️⃣ मुख्य चॅनेलवर (@spardhanoteshub) थेट ब्रॉडकास्ट करण्याचा पर्याय देईल.\n\n"
+        "1️⃣ <b>'HARALE DIGITAL STUDY POINT'</b> वॉटरमार्क जोडेल.\n"
+        "2️⃣ Telegram <code>file_id</code> कॅश करेल.\n"
+        "3️⃣ परीक्षा प्रवर्ग व विषय निवडून डेटाबेसमध्ये नोंद करेल.\n"
+        "4️⃣ मुख्य चॅनेलवर (@spardhanoteshub) थेट ब्रॉडकास्ट करण्याचा पर्याय देईल.\n\n"
         "💡 <i>आताच कोणतीही PDF फाईल या चॅटमध्ये पाठवा.</i>"
     )
     await message.reply(text)
+
 
 
 
@@ -191,9 +200,15 @@ def get_action_keyboard(category: str, subject: str, upload_id: str) -> InlineKe
 # Handlers
 # ==============================================================================
 
-@admin_upload_router.message(F.document, IsAdminFilter())
+@admin_upload_router.message(F.document)
 async def handle_admin_document_upload(message: Message) -> None:
     """Intercept documents sent by admin in private chat for instant cataloging."""
+    if not settings.is_admin(message.from_user.id):
+        await message.reply(
+            "ℹ️ <b>माहिती:</b> आपण पाठवलेली फाईल प्राप्त झाली. परंतु चॅनेलवर प्रकाशित करण्यासाठी प्रशासकीय अधिकार (Admin Access) आवश्यक आहेत."
+        )
+        return
+
     doc = message.document
     file_id = doc.file_id
     file_name = doc.file_name or "अभ्यास साहित्य.pdf"
@@ -211,11 +226,13 @@ async def handle_admin_document_upload(message: Message) -> None:
     text = (
         f"📥 <b>नवीन अभ्यास साहित्य प्राप्त झाले (New Document)</b>\n\n"
         f"📄 <b>नाव:</b> <code>{file_name}</code>\n"
-        f"📊 <b>आकार:</b> {file_size_mb} MB\n\n"
+        f"📊 <b>आकार:</b> {file_size_mb} MB\n"
+        f"🏷️ <b>ब्रँडिंग:</b> HARALE DIGITAL STUDY POINT (Auto-Watermark)\n\n"
         f"कृपया या साहित्यासाठी <b>परीक्षा प्रवर्ग (Category)</b> निवडा:"
     )
 
     await message.reply(text=text, reply_markup=get_categories_keyboard(upload_id))
+
 
 
 @admin_upload_router.callback_query(AdminUploadCallback.filter(), IsAdminFilter())

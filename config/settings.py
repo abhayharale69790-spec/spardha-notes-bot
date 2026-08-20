@@ -155,9 +155,14 @@ class Settings(BaseSettings):
             return [int(i) for i in v]
         return []
 
+    def is_admin(self, user_id: int) -> bool:
+        """Check if a user ID is an authorized administrator."""
+        return user_id in self.admin_user_ids
+
     def get_effective_db_url(self) -> str:
         """Resolve either DATABASE_URL or DB_URL with preference to DATABASE_URL."""
         return self.database_url or self.db_url or "sqlite+aiosqlite:///data/study_platform.db"
+
 
 
 @lru_cache()
