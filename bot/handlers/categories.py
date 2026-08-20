@@ -54,7 +54,7 @@ def get_working_portal_url(material: StudyMaterial) -> str:
 # ------------------------------------------------------------------------------
 # 1. Categories Menu Entry (Command or Menu Button)
 # ------------------------------------------------------------------------------
-@categories_router.message(lambda msg: msg.text in ["📚 अभ्यास साहित्य (Study Material)", "/categories"])
+@categories_router.message(lambda msg: msg.text in ["📚 अभ्यास साहित्य (Study Material)", "/categories", "/category"])
 async def cmd_categories_menu(message: Message) -> None:
     """Display root list of available examination categories."""
     text = (
@@ -63,6 +63,51 @@ async def cmd_categories_menu(message: Message) -> None:
         "<i>प्रत्येक विभागात अभ्यासक्रम, हस्तलिखित नोट्स, मागील प्रश्नपत्रिका (PYQ) व सराव पेपर्स उपलब्ध आहेत.</i>"
     )
     await message.answer(text=text, reply_markup=build_categories_keyboard())
+
+
+@categories_router.message(lambda msg: msg.text in ["📑 शासन निर्णय (GR)", "/gr", "/grs"])
+async def cmd_gr_feed(message: Message) -> None:
+    """Shortcut command to directly open latest Government Resolutions."""
+    async with get_session() as session:
+        materials = await crud.search_study_materials(
+            session=session,
+            material_type=MaterialType.GR,
+            limit=6,
+        )
+    text = (
+        "📑 <b>ताजे शासन निर्णय व परिपत्रके (Government Resolutions):</b>\n\n"
+        "<i>दस्तऐवज मिळवण्यासाठी खालीलपैकी हव्या त्या घटकावर टॅप करा:</i>"
+    )
+    keyboard = build_materials_list_keyboard(
+        materials=materials,
+        material_type=MaterialType.GR.value,
+        page=1,
+        has_next=len(materials) >= 6,
+    )
+    await message.answer(text=text, reply_markup=keyboard)
+
+
+@categories_router.message(lambda msg: msg.text in ["📝 प्रश्नपत्रिका (PYQ)", "/pyq", "/pyqs"])
+async def cmd_pyq_feed(message: Message) -> None:
+    """Shortcut command to directly open Previous Year Question Papers."""
+    async with get_session() as session:
+        materials = await crud.search_study_materials(
+            session=session,
+            material_type=MaterialType.PYQ,
+            limit=6,
+        )
+    text = (
+        "📝 <b>मागील वर्षांच्या प्रश्नपत्रिका (Previous Year Question Papers):</b>\n\n"
+        "<i>दस्तऐवज मिळवण्यासाठी खालीलपैकी हव्या त्या घटकावर टॅप करा:</i>"
+    )
+    keyboard = build_materials_list_keyboard(
+        materials=materials,
+        material_type=MaterialType.PYQ.value,
+        page=1,
+        has_next=len(materials) >= 6,
+    )
+    await message.answer(text=text, reply_markup=keyboard)
+
 
 
 # ------------------------------------------------------------------------------
