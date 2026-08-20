@@ -338,21 +338,39 @@ class TelegramUserCollector:
                             fname = attr.file_name
 
                     if mime == "application/pdf" or fname.lower().endswith(".pdf"):
-                        logger.info(f"📥 Downloading PDF from msg #{msg.id} ({fname or 'document'})...")
-                        raw_bytes = await self.client.download_media(msg, file=bytes)
-                        if raw_bytes:
-                            res = await self.process_document_bytes(
-                                raw_pdf_bytes=raw_bytes,
-                                original_filename=fname,
-                                caption=msg.text or "",
-                                channel_source=channel_source,
-                                msg_id=msg.id,
+                        doc_size = getattr(msg.document, "size", 0)
+                        if doc_size > 35 * 1024 * 1024:
+                            logger.info(f"⏭️ Skipping oversized PDF ({doc_size / (1024*1024):.1f} MB) from msg #{msg.id}")
+                            continue
+
+                        logger.info(f"📥 Streaming PDF from msg #{msg.id} ({fname or 'document'}, {doc_size / 1024:.1f} KB)...")
+                        safe_fname = re.sub(r'[^\w\.-]', '_', fname or 'document.pdf')
+                        raw_target = RAW_TELEGRAM_DOWNLOADS / f"tg_{channel_source.channel_id}_{msg.id}_{safe_fname}"
+
+                        try:
+                            dl_result = await asyncio.wait_for(
+                                self.client.download_media(msg, file=str(raw_target)),
+                                timeout=45.0,
                             )
-                            if res:
-                                ingested_count += 1
-                                await asyncio.sleep(1.5)
+                            if dl_result and raw_target.exists():
+                                raw_bytes = raw_target.read_bytes()
+                                res = await self.process_document_bytes(
+                                    raw_pdf_bytes=raw_bytes,
+                                    original_filename=fname,
+                                    caption=msg.text or "",
+                                    channel_source=channel_source,
+                                    msg_id=msg.id,
+                                )
+                                if res:
+                                    ingested_count += 1
+                                    await asyncio.sleep(1.0)
+                        except asyncio.TimeoutError:
+                            logger.warning(f"⚠️ Timeout downloading document from msg #{msg.id}, skipping.")
+                        except Exception as e_dl:
+                            logger.warning(f"⚠️ Error downloading msg #{msg.id}: {e_dl}")
 
             return ingested_count
+
         except Exception as e:
             logger.error(f"Error during Telegram channel scan for {channel_source.title}: {e}")
             return ingested_count

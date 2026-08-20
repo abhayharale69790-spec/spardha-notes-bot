@@ -21,12 +21,14 @@ ADMINISTRATIVE_NOISE_PATTERNS = [
 # Patterns that confirm genuine educational value
 EDUCATIONAL_CONTENT_PATTERNS = [
     r"अभ्यासक्रम|syllabus|परीक्षेचे स्वरूप|scheme of examination|exam pattern",
-    r"प्रश्नपत्रिका|question paper|pyq|मागील प्रश्न|model paper|mock test|सराव प्रश्नसंच",
-    r"नोट्स|notes|संकल्पना|formula|सूत्र|व्याकरण|grammar|पुस्तिका|handbook|guide",
-    r"प्रकरण|chapter|धडा|unit|solution|उत्तरे|स्पष्टीकरण|answer key",
-    r"घटना|कलम|इतिहास|भूगोल|विज्ञान|गणित|बुद्धिमत्ता|polity|history|geography|physics|chemistry|biology|maths",
+    r"प्रश्नपत्रिका|question paper|pyq|मागील प्रश्न|model paper|mock test|सराव प्रश्नसंच|प्रश्नसंच",
+    r"नोट्स|notes|संकल्पना|formula|सूत्र|व्याकरण|grammar|पुस्तिका|handbook|guide|compendium",
+    r"प्रकरण|chapter|धडा|unit|solution|उत्तरे|स्पष्टीकरण|answer key|उत्तरपत्रिका|ans key|answer",
+    r"घटना|कलम|इतिहास|भूगोल|विज्ञान|गणित|बुद्धिमत्ता|polity|history|geography|physics|chemistry|biology|maths|reasoning|aptitude",
     r"ncert|state board|balbharati|बालभारती|mpsc|upsc|jee|neet|ssc|banking",
+    r"राज्यसेवा|संयुक्त पूर्व|पूर्व परीक्षा|मुख्य परीक्षा|combine|csat|gs|चालू घडामोडी|police bharti|talathi|saral seva|पोलीस भरती|तलाठी",
 ]
+
 
 
 class QualityWorker:
