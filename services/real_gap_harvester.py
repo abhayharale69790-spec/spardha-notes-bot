@@ -238,7 +238,19 @@ class RealGapHarvester:
                 extracted_text = "\n".join(extracted_chunks)
                 content_hash = hashlib.sha256(data).hexdigest()
 
+                # EDUCATIONAL USEFULNESS CHECK: Reject tenders, blank forms, routine admin orders
+                from workers.quality_worker import QualityWorker
+                is_useful, reason = QualityWorker.check_educational_usefulness(
+                    title=candidate.title,
+                    text=extracted_text,
+                    page_count=page_count,
+                )
+                if not is_useful:
+                    logger.info(f"   🚫 Rejected non-educational file ({reason}): {candidate.download_url}")
+                    return None
+
                 return data, content_hash, page_count, extracted_text
+
 
         except Exception as e:
             logger.warning(f"Error downloading/validating PDF from {candidate.download_url}: {e}")
