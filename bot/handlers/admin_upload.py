@@ -298,7 +298,49 @@ async def handle_admin_upload_callbacks(
         }
         category_enum = cat_enum_map.get(cat_str, ExamCategory.GENERAL)
 
-        # 1. Save to Database
+        # 1. Apply HARALE DIGITAL STUDY POINT Auto-Branding & Watermarking
+        final_file_id = file_id
+        if settings.watermark_enabled:
+            try:
+                await callback.message.edit_text("🎨 <b>'HARALE DIGITAL STUDY POINT' वॉटरमार्क जोडत आहे...</b>")
+                temp_in = Path("downloads") / f"temp_in_{upload_id}.pdf"
+                temp_out = Path("downloads") / f"temp_branded_{upload_id}.pdf"
+                temp_in.parent.mkdir(parents=True, exist_ok=True)
+
+                file_info = await bot.get_file(file_id)
+                if file_info.file_path:
+                    await bot.download_file(file_info.file_path, destination=temp_in)
+                    from services.pdf_watermark import apply_harale_branding_to_pdf
+                    branded_path = apply_harale_branding_to_pdf(
+                        input_pdf_path=str(temp_in),
+                        output_pdf_path=str(temp_out),
+                        brand_name=settings.brand_name,
+                        channel=settings.brand_channel,
+                        bot_username=settings.brand_bot,
+                    )
+                    if os.path.exists(branded_path):
+                        from aiogram.types import FSInputFile
+                        branded_input = FSInputFile(branded_path, filename=f"[HDSP] {file_name}")
+                        sent_doc = await bot.send_document(
+                            chat_id=settings.staging_channel_id,
+                            document=branded_input,
+                            caption=f"🏷️ [HARALE DIGITAL STUDY POINT Branded]\n📄 {file_name}",
+                        )
+                        if sent_doc.document:
+                            final_file_id = sent_doc.document.file_id
+
+                    # Clean up temp files
+                    for p in (temp_in, temp_out):
+                        if p.exists():
+                            try:
+                                p.unlink()
+                            except Exception:
+                                pass
+            except Exception as wm_err:
+                logger.error(f"Watermarking error during admin upload: {wm_err}", exc_info=True)
+                final_file_id = file_id
+
+        # 2. Save Branded Study Material to Database
         async with get_session() as session:
             await crud.create_study_material(
                 session=session,
@@ -308,32 +350,33 @@ async def handle_admin_upload_callbacks(
                 material_type=MaterialType.SHORT_NOTES,
                 file_path=file_name,
                 year=datetime.now().year,
-                telegram_file_id=file_id,
+                telegram_file_id=final_file_id,
             )
 
-        # 2. If Broadcast is requested, send to Main Channel
+        # 3. If Broadcast is requested, send Branded Document to Main Channel
         if step == "bcast":
             bot_info = await bot.get_me()
             bot_username = bot_info.username or "StudyBot"
 
             channel_caption = (
-                f"📚 <b>नवीन अभ्यास साहित्य उपलब्ध | New Study Material</b>\n\n"
+                f"📚 <b>{settings.brand_name} | नवीन अभ्यास साहित्य</b>\n\n"
                 f"📌 <b>{file_name.replace('.pdf', '').replace('_', ' ')}</b>\n\n"
                 f"📖 <b>विषय:</b> {subj}\n"
                 f"🏛️ <b>प्रवर्ग:</b> #{category_enum.value}\n\n"
-                f"#StudyNotes #CompetitiveExams #{category_enum.value}\n"
+                f"🏷️ <i>{settings.brand_tagline}</i>\n"
                 f"━━━━━━━━━━━━━━━━━━━━\n"
-                f"🤖 बॉट वरून सर्व मोफत साहित्य मिळवण्यासाठी: @{bot_username}"
+                f"🤖 बॉट वरून सर्व मोफत साहित्य मिळवण्यासाठी: @{bot_username}\n"
+                f"📢 मुख्य चॅनेल: {settings.brand_channel}"
             )
 
             try:
                 await bot.send_document(
                     chat_id=settings.main_channel_id,
-                    document=file_id,
+                    document=final_file_id,
                     caption=channel_caption,
                 )
                 await callback.message.edit_text(
-                    f"✅ <b>यशस्वी!</b>\n\nसाहित्य डेटाबेसमध्ये जतन केले आणि <b>@{settings.main_channel_id}</b> वर प्रसारित केले!"
+                    f"✅ <b>यशस्वी!</b>\n\n<b>'{settings.brand_name}'</b> वॉटरमार्कसह साहित्य जतन केले आणि <b>{settings.brand_channel}</b> वर प्रसारित केले!"
                 )
             except Exception as e:
                 logger.error(f"Broadcast error: {e}")
@@ -342,7 +385,8 @@ async def handle_admin_upload_callbacks(
                 )
         else:
             await callback.message.edit_text(
-                "✅ <b>यशस्वी!</b>\n\nसाहित्य बॉटच्या लायब्ररीत जतन केले. विद्यार्थी आता `/search` आणि मेन्यूद्वारे हे डाऊनलोड करू शकतात."
+                f"✅ <b>यशस्वी!</b>\n\n<b>'{settings.brand_name}'</b> वॉटरमार्कसह साहित्य बॉटच्या लायब्ररीत जतन केले. विद्यार्थी आता `/search` आणि मेन्यूद्वारे हे डाऊनलोड करू शकतात."
             )
 
         await callback.answer("यशस्वीरित्या जोडले!")
+

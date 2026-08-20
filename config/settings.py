@@ -108,6 +108,28 @@ class Settings(BaseSettings):
         description="Local directory path for temporary database backup dumps",
     )
 
+    # Brand Customization & Watermarking
+    brand_name: str = Field(
+        default="HARALE DIGITAL STUDY POINT",
+        description="Brand name to watermark on study material PDFs",
+    )
+    brand_tagline: str = Field(
+        default="स्पर्धा परीक्षा डिजिटल अभ्यास केंद्र",
+        description="Brand subtitle/tagline",
+    )
+    brand_channel: str = Field(
+        default="@spardhanoteshub",
+        description="Telegram channel link stamped on PDF footer",
+    )
+    brand_bot: str = Field(
+        default="@SpardhaNotes_bot",
+        description="Telegram bot username stamped on PDF footer",
+    )
+    watermark_enabled: bool = Field(
+        default=True,
+        description="Whether to stamp watermark on uploaded PDFs",
+    )
+
     # User-agent header list for rotation
     user_agents: List[str] = Field(
         default_factory=lambda: [
