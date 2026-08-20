@@ -700,4 +700,42 @@ async def get_telegram_collector_telemetry(session: AsyncSession) -> Dict[str, A
     }
 
 
+async def get_discovered_channels(
+    session: AsyncSession,
+    status: ChannelAuthStatus = ChannelAuthStatus.PENDING_REVIEW,
+    category: Optional[ExamCategory] = None,
+    limit: int = 50,
+) -> List[TelegramChannelSource]:
+    """Retrieve discovered channels filtered by authorization status and optional category."""
+    stmt = select(TelegramChannelSource).where(TelegramChannelSource.authorization_status == status)
+    if category:
+        stmt = stmt.where(TelegramChannelSource.exam_category == category)
+    stmt = stmt.order_by(TelegramChannelSource.total_verified.desc(), TelegramChannelSource.id.desc()).limit(limit)
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def update_channel_auth_status(
+    session: AsyncSession,
+    channel_id: int,
+    status: ChannelAuthStatus,
+    is_active: bool = False,
+) -> Optional[TelegramChannelSource]:
+    """Update channel authorization status and active flag."""
+    stmt = (
+        update(TelegramChannelSource)
+        .where(TelegramChannelSource.channel_id == channel_id)
+        .values(
+            authorization_status=status,
+            is_active=is_active,
+            updated_at=utc_now(),
+        )
+        .returning(TelegramChannelSource)
+    )
+    res = await session.execute(stmt)
+    await session.commit()
+    return res.scalar_one_or_none()
+
+
+
 

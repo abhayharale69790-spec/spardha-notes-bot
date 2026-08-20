@@ -134,3 +134,109 @@ async def handle_telegram_stats_command(message: Message) -> None:
         f"💡 <i>सिस्टम स्टेटस: अखंड स्वयंचलित हार्वेस्टिंग सुरू आहे.</i>"
     )
     await message.reply(stats_text, parse_mode="HTML")
+
+
+@telegram_collector_admin_router.message(Command("telegram_discover", "tg_discover"), IsAdminFilter())
+async def handle_telegram_discover_command(message: Message) -> None:
+    """Trigger MTProto global keyword discovery for new public educational study channels."""
+    status_msg = await message.reply(
+        "🔎 <b>नवीन टेलिग्राम अभ्यास चॅनेल्स शोधत आहे...</b>\n"
+        "<i>(MTProto Global Search across 26 exam keywords active...)</i>",
+        parse_mode="HTML",
+    )
+
+    from collectors.telegram_channel_discovery import telegram_channel_discovery
+    discovered = await telegram_channel_discovery.discover_channels(limit_per_keyword=10)
+
+    if not discovered:
+        await status_msg.edit_text("ℹ️ कोणतेही नवीन प्रमाणित चॅनेल्स सापडले नाहीत (No new candidate channels found).", parse_mode="HTML")
+        return
+
+    # Group by category
+    by_cat = {}
+    for item in discovered:
+        cat = item["category"]
+        by_cat.setdefault(cat, []).append(item)
+
+    lines = [
+        f"🎉 <b>स्वयंचलित चॅनेल शोध पूर्ण (Discovery Completed)!</b>",
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        f"📡 <b>एकूण नवीन शोधलेली चॅनेल्स:</b> <code>{len(discovered)} New Channels</code>",
+        f"🔒 <b>स्थिती:</b> <code>PENDING_REVIEW (No downloads performed)</code>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+        "<b>श्रेणीनुसार सारांश (Summary by Category):</b>",
+    ]
+
+    for cat_name, items in sorted(by_cat.items()):
+        high_yield = sum(1 for x in items if "High" in x["estimated_yield"])
+        lines.append(f"• <b>#{cat_name}</b>: <code>{len(items)} channels</code> (🔥 {high_yield} High-Yield)")
+
+    lines.append("\n💡 <i>तपशील पाहण्यासाठी <code>/telegram_discovered</code> किंवा <code>/telegram_discovered &lt;category&gt;</code> वापरा.</i>")
+    await status_msg.edit_text("\n".join(lines), parse_mode="HTML")
+
+
+@telegram_collector_admin_router.message(Command("telegram_discovered", "tg_discovered"), IsAdminFilter())
+async def handle_telegram_discovered_command(message: Message, command: CommandObject) -> None:
+    """List newly discovered public channels pending review."""
+    args = (command.args or "").strip().upper()
+    cat_filter = None
+    if args:
+        try:
+            cat_filter = ExamCategory(args)
+        except ValueError:
+            pass
+
+    async with get_session() as session:
+        channels = await crud.get_discovered_channels(
+            session=session,
+            status=ChannelAuthStatus.PENDING_REVIEW,
+            category=cat_filter,
+            limit=20,
+        )
+
+    if not channels:
+        # Check JSON fallback if database has not been populated yet
+        json_path = Path("data/discovered_channels.json")
+        if json_path.exists():
+            with open(json_path, encoding="utf-8") as f:
+                import json
+                raw = json.load(f)
+                if cat_filter:
+                    raw = [x for x in raw if x.get("category") == cat_filter.value]
+                if raw:
+                    lines = [
+                        f"📡 <b>Discovered Channels Pending Review ({len(raw)} items)</b>",
+                        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+                    ]
+                    for item in raw[:15]:
+                        lines.append(
+                            f"🟡 <b>{html.escape(item['title'])}</b>\n"
+                            f"   🔗 {item['username']} | 🏛️ #{item['category']}\n"
+                            f"   📥 PDF Yield: <b>{item['pdf_count_sample']}/100 ({item['pdf_yield_pct']}%)</b> | {item['estimated_yield']}\n"
+                            f"   📅 Latest: <code>#{item['latest_msg_id']} ({item['latest_date']})</code>"
+                        )
+                        lines.append("──────────────────────────────────")
+                    await message.reply("\n".join(lines), parse_mode="HTML")
+                    return
+
+        await message.reply("ℹ️ कोणतेही नवीन शोधलेले चॅनेल्स उपलब्ध नाहीत. शोध घेण्यासाठी <code>/telegram_discover</code> चालवा.", parse_mode="HTML")
+        return
+
+    lines = [
+        f"📡 <b>शोधलेली अभ्यास चॅनेल्स (Discovered Channels - Review Queue)</b>",
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
+    ]
+
+    for c in channels:
+        uname = f"@{c.channel_username}" if c.channel_username else f"ID {c.channel_id}"
+        lines.append(
+            f"🟡 <b>{html.escape(c.title)}</b>\n"
+            f"   🔗 {uname} | 🏛️ #{c.exam_category.value}\n"
+            f"   📊 Status: <code>{c.authorization_status.value}</code> (Active: {c.is_active})\n"
+            f"   🔄 Last Msg: <code>#{c.last_scanned_msg_id}</code>"
+        )
+        lines.append("──────────────────────────────────")
+
+    lines.append("💡 <i>मंजूर करण्यासाठी <code>/telegram_backfill &lt;channel&gt;</code> किंवा ऍडमिन पॅनेल वापरा.</i>")
+    await message.reply("\n".join(lines), parse_mode="HTML")
+
