@@ -1,20 +1,27 @@
 """Asynchronous CRUD Operations with Cloud-Native Hybrid Search."""
 
 import re
-from typing import List, Optional, Sequence, Dict
+from typing import Any, Dict, List, Optional, Sequence
 from rapidfuzz import fuzz, process
-from sqlalchemy import distinct, or_, select, update
+from sqlalchemy import distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from database.models import (
+    ChannelAuthStatus,
     ExamCategory,
     MaterialType,
+    SourceType,
     StagingQueue,
     StagingStatus,
     StudyMaterial,
+    TelegramChannelSource,
     IngestionMetric,
+    utc_now,
 )
 
+
 from search_engine.hybrid_search import rank_hybrid_materials
+
 
 SYNONYM_CLUSTERS: List[List[str]] = [
     ["polity", "rajyashastra", "rajyashashtra", "राज्यशास्त्र", "राज्यघटना", "संविधान", "constitution", "governance"],
@@ -88,14 +95,18 @@ async def create_study_material(
     year: Optional[int] = None,
     topic: Optional[str] = "General",
     language: str = "Marathi",
+    source_type: SourceType = SourceType.OFFICIAL,
     source_name: str = "Official Portal",
+    source_url: Optional[str] = None,
+    source_doc_id: Optional[str] = None,
+    page_count: Optional[int] = 1,
     content_hash: Optional[str] = None,
     extracted_text: Optional[str] = None,
     quality_score: int = 100,
     status: str = "VERIFIED",
     telegram_file_id: Optional[str] = None,
 ) -> StudyMaterial:
-    """Insert a new verified study material into the database with full metadata & audit tokens."""
+    """Insert a new verified study material into the database with full provenance metadata & audit tokens."""
     material = StudyMaterial(
         title=title,
         exam_category=exam_category,
@@ -104,8 +115,12 @@ async def create_study_material(
         language=language or "Marathi",
         material_type=material_type,
         year=year,
+        source_type=source_type,
         source_name=source_name or "Official Portal",
+        source_url=source_url,
+        source_doc_id=source_doc_id,
         file_path=file_path,
+        page_count=page_count or 1,
         content_hash=content_hash,
         extracted_text=extracted_text,
         quality_score=quality_score,
@@ -116,6 +131,7 @@ async def create_study_material(
     await session.commit()
     await session.refresh(material)
     return material
+
 
 
 async def get_material_by_hash(
@@ -577,5 +593,111 @@ async def get_exam_coverage_summary(session: AsyncSession) -> Dict[str, Dict[str
             coverage[cat_key] = {}
         coverage[cat_key][subj] = cnt
     return coverage
+
+
+
+async def get_or_create_telegram_channel(
+    session: AsyncSession,
+    channel_id: int,
+    channel_username: Optional[str],
+    title: str,
+    exam_category: ExamCategory = ExamCategory.GENERAL,
+    authorization_status: ChannelAuthStatus = ChannelAuthStatus.AUTHORIZED,
+) -> TelegramChannelSource:
+    """Fetch existing registered Telegram channel or create new approved source."""
+    stmt = select(TelegramChannelSource).where(TelegramChannelSource.channel_id == channel_id)
+    res = await session.execute(stmt)
+    existing = res.scalar_one_or_none()
+    if existing:
+        if channel_username and existing.channel_username != channel_username:
+            existing.channel_username = channel_username
+            await session.commit()
+            await session.refresh(existing)
+        return existing
+
+    new_channel = TelegramChannelSource(
+        channel_id=channel_id,
+        channel_username=channel_username,
+        title=title,
+        exam_category=exam_category,
+        authorization_status=authorization_status,
+        is_active=True,
+    )
+    session.add(new_channel)
+    await session.commit()
+    await session.refresh(new_channel)
+    return new_channel
+
+
+async def get_all_active_telegram_channels(session: AsyncSession) -> Sequence[TelegramChannelSource]:
+    """Fetch all active approved Telegram channels for user-collector harvesting."""
+    stmt = (
+        select(TelegramChannelSource)
+        .where(
+            TelegramChannelSource.is_active == True,
+            TelegramChannelSource.authorization_status.in_([ChannelAuthStatus.AUTHORIZED, ChannelAuthStatus.PUBLIC_OPEN]),
+        )
+        .order_by(TelegramChannelSource.updated_at.desc())
+    )
+    res = await session.execute(stmt)
+    return res.scalars().all()
+
+
+async def get_telegram_channel_by_username(
+    session: AsyncSession,
+    username: str,
+) -> Optional[TelegramChannelSource]:
+    """Look up registered channel by username (without @)."""
+    clean_u = username.strip().replace("@", "").lower()
+    stmt = select(TelegramChannelSource).where(func.lower(TelegramChannelSource.channel_username) == clean_u)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def update_telegram_channel_scan_progress(
+    session: AsyncSession,
+    channel_id: int,
+    last_scanned_msg_id: int,
+    new_downloaded: int = 0,
+    new_verified: int = 0,
+) -> None:
+    """Record scan progress and increment document harvest counters."""
+    stmt = (
+        update(TelegramChannelSource)
+        .where(TelegramChannelSource.channel_id == channel_id)
+        .values(
+            last_scanned_msg_id=last_scanned_msg_id,
+            total_pdfs_downloaded=TelegramChannelSource.total_pdfs_downloaded + new_downloaded,
+            total_verified=TelegramChannelSource.total_verified + new_verified,
+            updated_at=utc_now(),
+        )
+    )
+    await session.execute(stmt)
+    await session.commit()
+
+
+async def get_telegram_collector_telemetry(session: AsyncSession) -> Dict[str, Any]:
+    """Return aggregated metrics for Telegram user-collector operations."""
+    stmt = select(
+        func.count(TelegramChannelSource.id),
+        func.sum(TelegramChannelSource.total_messages_scanned),
+        func.sum(TelegramChannelSource.total_pdfs_downloaded),
+        func.sum(TelegramChannelSource.total_verified),
+    )
+    res = (await session.execute(stmt)).one_or_none()
+
+    stmt_verified_tg = select(func.count(StudyMaterial.id)).where(
+        StudyMaterial.source_type.in_([SourceType.AUTHORIZED, SourceType.COMMUNITY]),
+        StudyMaterial.status == "VERIFIED",
+    )
+    total_tg_materials = (await session.execute(stmt_verified_tg)).scalar() or 0
+
+    return {
+        "total_channels": res[0] if res and res[0] else 0,
+        "messages_scanned": res[1] if res and res[1] else 0,
+        "pdfs_downloaded": res[2] if res and res[2] else 0,
+        "pdfs_verified": total_tg_materials,
+    }
+
 
 

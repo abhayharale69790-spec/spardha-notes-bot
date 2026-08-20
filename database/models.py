@@ -1,9 +1,11 @@
-"""SQLAlchemy 2.0 Database Models with Extended Ingestion Telemetry & Indexing."""
+"""SQLAlchemy 2.0 Database Models with Extended Ingestion Telemetry, Provenance & MTProto Source Registry."""
 
 from datetime import datetime, timezone
 import enum
 from typing import Optional
 from sqlalchemy import (
+    Boolean,
+    BigInteger,
     DateTime,
     Enum as SAEnum,
     Integer,
@@ -53,6 +55,22 @@ class MaterialType(str, enum.Enum):
     CURRENT_AFFAIRS = "CURRENT_AFFAIRS"    # Daily / Monthly Current Affairs Digest
 
 
+class SourceType(str, enum.Enum):
+    """Strict Provenance Source Classification."""
+    OFFICIAL = "OFFICIAL"                  # Direct government or exam board portal
+    AUTHORIZED = "AUTHORIZED"              # Approved educational Telegram channels / university repositories
+    ADMIN = "ADMIN"                        # Admin-verified physical document upload
+    COMMUNITY = "COMMUNITY"                # Student / community submission (requires moderation)
+
+
+class ChannelAuthStatus(str, enum.Enum):
+    """Authorization status for external Telegram channels."""
+    AUTHORIZED = "AUTHORIZED"              # Officially vetted & approved for automatic ingestion
+    PUBLIC_OPEN = "PUBLIC_OPEN"            # Open public study channel (subject to strict usefulness filter)
+    PENDING_REVIEW = "PENDING_REVIEW"      # Newly added channel awaiting admin verification
+    REVOKED = "REVOKED"                    # Blocked / revoked source (strictly skipped)
+
+
 class StagingStatus(str, enum.Enum):
     """Approval lifecycle states for scraped documents."""
     PENDING = "PENDING"
@@ -66,7 +84,7 @@ def utc_now() -> datetime:
 
 
 class StudyMaterial(Base):
-    """Verified competitive exam study materials repository with full metadata & hashes."""
+    """Verified competitive exam study materials repository with strict provenance & hashes."""
 
     __tablename__ = "study_materials"
 
@@ -88,8 +106,17 @@ class StudyMaterial(Base):
         index=True,
     )
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    source_type: Mapped[SourceType] = mapped_column(
+        SAEnum(SourceType, native_enum=False),
+        default=SourceType.OFFICIAL,
+        nullable=False,
+        index=True,
+    )
     source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="Official Portal", index=True)
+    source_url: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True, index=True)
+    source_doc_id: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, index=True)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    page_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=1)
     content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
     extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     quality_score: Mapped[int] = mapped_column(Integer, nullable=False, default=100, index=True)
@@ -107,10 +134,53 @@ class StudyMaterial(Base):
         Index("ix_materials_search_opt", "exam_category", "material_type", "created_at"),
         Index("ix_materials_file_id", "telegram_file_id"),
         Index("ix_materials_content_hash", "content_hash"),
+        Index("ix_materials_source_provenance", "source_type", "source_url"),
     )
 
     def __repr__(self) -> str:
-        return f"<StudyMaterial(id={self.id}, title='{self.title[:30]}', category='{self.exam_category}', type='{self.material_type}')>"
+        return f"<StudyMaterial(id={self.id}, title='{self.title[:30]}', category='{self.exam_category}', type='{self.material_type}', source='{self.source_type}')>"
+
+
+class TelegramChannelSource(Base):
+    """Approved external Telegram channels registry for user-account collector."""
+
+    __tablename__ = "telegram_channel_sources"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    channel_id: Mapped[int] = mapped_column(BigInteger, unique=True, nullable=False, index=True)
+    channel_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True, index=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    exam_category: Mapped[ExamCategory] = mapped_column(
+        SAEnum(ExamCategory, native_enum=False),
+        default=ExamCategory.GENERAL,
+        nullable=False,
+        index=True,
+    )
+    authorization_status: Mapped[ChannelAuthStatus] = mapped_column(
+        SAEnum(ChannelAuthStatus, native_enum=False),
+        default=ChannelAuthStatus.AUTHORIZED,
+        nullable=False,
+        index=True,
+    )
+    last_scanned_msg_id: Mapped[int] = mapped_column(Integer, default=0)
+    total_messages_scanned: Mapped[int] = mapped_column(Integer, default=0)
+    total_pdfs_downloaded: Mapped[int] = mapped_column(Integer, default=0)
+    total_verified: Mapped[int] = mapped_column(Integer, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        onupdate=utc_now,
+        nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<TelegramChannelSource(id={self.id}, username='@{self.channel_username}', title='{self.title}', status='{self.authorization_status}')>"
 
 
 class StagingQueue(Base):

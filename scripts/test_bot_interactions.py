@@ -19,10 +19,13 @@ from bot.handlers.categories import get_working_portal_url
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 
+__test__ = False
 
-async def test_bot_queries():
+
+async def run_bot_query_simulations():
     """Test 20 real student search queries against the database and format Movie-Finder cards."""
     await init_db()
+
     test_queries = [
         "पोलीस भरती गणित",
         "MPSC राज्यशास्त्र नोट्स",
@@ -74,4 +77,5 @@ async def test_bot_queries():
 
 
 if __name__ == "__main__":
-    asyncio.run(test_bot_queries())
+    asyncio.run(run_bot_query_simulations())
+

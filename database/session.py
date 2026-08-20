@@ -120,11 +120,16 @@ async def init_db() -> None:
             "ALTER TABLE study_materials ADD COLUMN topic VARCHAR(200) DEFAULT 'General'",
             "ALTER TABLE study_materials ADD COLUMN language VARCHAR(50) DEFAULT 'Marathi'",
             "ALTER TABLE study_materials ADD COLUMN source_name VARCHAR(200) DEFAULT 'Official Portal'",
+            "ALTER TABLE study_materials ADD COLUMN source_type VARCHAR(50) DEFAULT 'OFFICIAL'",
+            "ALTER TABLE study_materials ADD COLUMN source_url VARCHAR(1000)",
+            "ALTER TABLE study_materials ADD COLUMN source_doc_id VARCHAR(200)",
+            "ALTER TABLE study_materials ADD COLUMN page_count INTEGER DEFAULT 1",
             "ALTER TABLE study_materials ADD COLUMN content_hash VARCHAR(64)",
             "ALTER TABLE study_materials ADD COLUMN extracted_text TEXT",
             "ALTER TABLE study_materials ADD COLUMN quality_score INTEGER DEFAULT 100",
             "ALTER TABLE study_materials ADD COLUMN status VARCHAR(50) DEFAULT 'VERIFIED'",
         ]
+
         for stmt in migration_statements:
             try:
                 await conn.execute(text(stmt))

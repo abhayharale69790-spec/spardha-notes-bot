@@ -23,6 +23,31 @@ class Settings(BaseSettings):
         description="Telegram bot token obtained from @BotFather",
     )
 
+    # Telegram MTProto User Client (Dedicated Collector Account)
+    telegram_api_id: Optional[int] = Field(
+        default=None,
+        validation_alias="TELEGRAM_API_ID",
+        description="Telegram API ID for dedicated MTProto User Client collector",
+    )
+    telegram_api_hash: Optional[str] = Field(
+        default=None,
+        validation_alias="TELEGRAM_API_HASH",
+        description="Telegram API Hash for dedicated MTProto User Client collector",
+    )
+    telegram_session_name: str = Field(
+        default="data/telegram_user_session",
+        description="Path for persistent MTProto SQLite session file",
+    )
+    telegram_session_string: Optional[str] = Field(
+        default=None,
+        validation_alias="TELEGRAM_SESSION_STRING",
+        description="Optional Telethon StringSession string for containerized deployments",
+    )
+    telegram_collector_enabled: bool = Field(
+        default=True,
+        description="Whether the MTProto user-account collector is active",
+    )
+
     # Channel IDs (can be negative integer e.g. -1001234567890 or @username)
     main_channel_id: Union[int, str] = Field(
         default=-1001234567890,
@@ -42,6 +67,7 @@ class Settings(BaseSettings):
         default_factory=list,
         description="List of Telegram user IDs permitted to approve/discard drafts and manage the bot",
     )
+
 
     # Database URL (PostgreSQL asyncpg or SQLite aiosqlite fallback)
     database_url: str = Field(
