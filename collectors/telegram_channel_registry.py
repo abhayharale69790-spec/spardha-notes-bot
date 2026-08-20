@@ -26,6 +26,7 @@ class ApprovedChannelConfig:
 
 # Curated directory of approved educational Telegram channels for target categories
 DEFAULT_APPROVED_CHANNELS: List[ApprovedChannelConfig] = [
+    # Hub Channel
     ApprovedChannelConfig(
         channel_id=-1004297360223,
         channel_username="spardhanoteshub",
@@ -34,79 +35,190 @@ DEFAULT_APPROVED_CHANNELS: List[ApprovedChannelConfig] = [
         authorization_status=ChannelAuthStatus.AUTHORIZED,
         description="Official publication channel for Harale Digital Study Point",
     ),
+
+    # 1. MPSC
     ApprovedChannelConfig(
         channel_id=-1001589412301,
-        channel_username="mpsc_study_materials",
-        title="MPSC Rajyaseva & Combine Study Hub",
+        channel_username="mpsc_StudyCampus",
+        title="📎MPSC Study Campus",
         exam_category=ExamCategory.MPSC,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="Vetted MPSC syllabus notes, PYQ papers, and Maharashtra state study compendiums",
     ),
     ApprovedChannelConfig(
-        channel_id=-1001798324512,
-        channel_username="maharashtra_police_bharti_hub",
-        title="Maharashtra Police Bharti Study Point",
+        channel_id=-1001589412302,
+        channel_username="MPSCHistory",
+        title="MPSC History",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412303,
+        channel_username="MPSCmaths",
+        title="MPSCmaths",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412304,
+        channel_username="MaharashtraSpardhaPariksha",
+        title="महाराष्ट्र स्पर्धा परीक्षा (Official)",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412305,
+        channel_username="mpscguidnce",
+        title="MPSC Guidance™",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412306,
+        channel_username="mpscsimplified",
+        title="MPSC SIMPLIFIED(official)",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412307,
+        channel_username="mpsc_university",
+        title="🎓𝙈𝙋𝙎𝘾 𝙐𝙉𝙄𝙑𝙀𝙍𝙎𝙄𝙏𝙔🚨",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412308,
+        channel_username="VidyaPrabodhiniMPSC",
+        title="🇮🇳 Vidya Prabodhini MPSC",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001589412309,
+        channel_username="MpscMadeSimple",
+        title="𝗠𝗽𝘀𝗰 𝗘𝘅𝗮𝗺 𝗠𝗮𝗻𝘁𝗿𝗮™",
+        exam_category=ExamCategory.MPSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+
+    # 2. Police Bharti
+    ApprovedChannelConfig(
+        channel_id=-1001798324513,
+        channel_username="missionpolice2021",
+        title="Mission Police bharti ™",
         exam_category=ExamCategory.POLICE_BHARTI,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="Police Bharti Marathi grammar, maths, and legal study digests",
     ),
     ApprovedChannelConfig(
-        channel_id=-1001645239801,
-        channel_username="saral_seva_talathi_notes",
-        title="Saral Seva & Talathi TCS Pattern Prep",
+        channel_id=-1001798324514,
+        channel_username="Police_bharti_and_MPSC",
+        title="POLICE BHARTI 2026 🚔👮‍♀️",
+        exam_category=ExamCategory.POLICE_BHARTI,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001798324515,
+        channel_username="MaharashtraPoliceBharati",
+        title="महाराष्ट्र पोलीस भरती (Official)™",
+        exam_category=ExamCategory.POLICE_BHARTI,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001798324516,
+        channel_username="tikkarmarathi",
+        title="TikKar Marathi - पोलीस भरती",
+        exam_category=ExamCategory.POLICE_BHARTI,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001798324517,
+        channel_username="vishalsirgk",
+        title="GK by Vishal Sir",
+        exam_category=ExamCategory.POLICE_BHARTI,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+
+    # 3. Saral Seva / Talathi
+    ApprovedChannelConfig(
+        channel_id=-1001645239802,
+        channel_username="mega_talathi_bharti",
+        title="Talathi Bharti",
         exam_category=ExamCategory.SARAL_SEVA,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="TCS/IBPS pattern question banks and English grammar master guides",
     ),
     ApprovedChannelConfig(
-        channel_id=-1001923847510,
-        channel_username="upsc_civil_services_library",
-        title="UPSC CSE Prelims & Mains Resource Hub",
-        exam_category=ExamCategory.UPSC,
+        channel_id=-1001645239803,
+        channel_username="SuperCoachingMarathiby_Testbook",
+        title="SuperCoaching Marathi by Testbook",
+        exam_category=ExamCategory.SARAL_SEVA,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="UPSC standard reference material, solved PYQs, and CSAT notes",
     ),
+
+    # 4. SSC
     ApprovedChannelConfig(
-        channel_id=-1001837462910,
-        channel_username="ssc_cgl_chsl_preparation",
-        title="SSC CGL & CHSL English & Maths Hub",
+        channel_id=-1001837462911,
+        channel_username="ssccglpinnacleonline",
+        title="Pinnacle Publications official",
         exam_category=ExamCategory.SSC,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="Advanced mathematics formulas, grammar rules, and 10-year question sets",
     ),
     ApprovedChannelConfig(
-        channel_id=-1001748293019,
-        channel_username="ibps_sbi_banking_digest",
-        title="Banking Awareness & Speed Maths Point",
+        channel_id=-1001837462912,
+        channel_username="Exam_Posts",
+        title="ExamPost ™",
+        exam_category=ExamCategory.SSC,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+
+    # 5. Banking
+    ApprovedChannelConfig(
+        channel_id=-1001748293020,
+        channel_username="banking_free_study_materials_pdf",
+        title="Banking Free Study Material For SBI",
         exam_category=ExamCategory.BANKING,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="Speed maths tricks, high-level reasoning puzzles, and RBI banking updates",
     ),
+
+    # 6. JEE & NEET
     ApprovedChannelConfig(
-        channel_id=-1001892304918,
-        channel_username="ncert_foundation_textbooks",
-        title="NCERT Class 6 - 12 Complete Science & Maths",
-        exam_category=ExamCategory.NCERT,
-        authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="NCERT textbook PDFs and chapterwise conceptual summaries",
-    ),
-    ApprovedChannelConfig(
-        channel_id=-1001938472918,
-        channel_username="maharashtra_state_board_books",
-        title="Maharashtra 10th SSC & 12th HSC Board Hub",
-        exam_category=ExamCategory.BOARD_10_12,
-        authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="eBalbharati state board textbooks and official question banks",
-    ),
-    ApprovedChannelConfig(
-        channel_id=-1001648291049,
-        channel_username="jee_neet_science_academy",
-        title="NTA JEE & NEET UG High-Yield Notes",
+        channel_id=-1001648291050,
+        channel_username="JEE_Full_Study_Material",
+        title="JEE Full Study Material",
         exam_category=ExamCategory.JEE,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
-        description="Physics, Chemistry, and Biology chapterwise question banks and formulas",
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001648291051,
+        channel_username="NEET_Full_Study_Material",
+        title="NEET Full Study Material",
+        exam_category=ExamCategory.NEET,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001892304919,
+        channel_username="pdfstudymaterialss",
+        title="JEE NEET PDF STUDY MATERIALS",
+        exam_category=ExamCategory.NCERT,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+
+    # 7. State Board 10th - 12th
+    ApprovedChannelConfig(
+        channel_id=-1001938472919,
+        channel_username="mhsb_11_12",
+        title="Maharashtra State Board Class 11 & 12",
+        exam_category=ExamCategory.BOARD_10_12,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
+    ),
+    ApprovedChannelConfig(
+        channel_id=-1001938472920,
+        channel_username="maharashtra_state_boardbooks",
+        title="Maharashtra State Board Books",
+        exam_category=ExamCategory.BOARD_10_12,
+        authorization_status=ChannelAuthStatus.AUTHORIZED,
     ),
 ]
+
 
 
 class TelegramChannelRegistry:
