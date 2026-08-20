@@ -72,11 +72,12 @@ class Settings(BaseSettings):
 
     # Interval Timers
     scrape_interval_minutes: int = Field(
-        default=15,
+        default=60,
         ge=1,
         le=1440,
         description="Frequency in minutes to scrape government & exam portals",
     )
+
     backup_interval_hours: int = Field(
         default=24,
         ge=1,

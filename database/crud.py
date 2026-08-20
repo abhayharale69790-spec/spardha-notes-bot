@@ -261,6 +261,8 @@ async def update_material_telegram_file_id(
     return await get_study_material_by_id(session, material_id)
 
 
+from sqlalchemy import distinct, or_, select, update, func
+
 # ==============================================================================
 # Staging Queue Operations
 # ==============================================================================
@@ -269,18 +271,29 @@ async def is_url_already_known(
     session: AsyncSession,
     source_url: str,
     pdf_url: str,
+    title: Optional[str] = None,
 ) -> bool:
-    """Check if document has already been processed or staged."""
-    stmt_stg = select(StagingQueue.id).where(
-        or_(StagingQueue.source_url == source_url, StagingQueue.pdf_url == pdf_url)
-    )
+    """Check if document has already been processed or staged by URL or Title."""
+    conditions_stg = [
+        StagingQueue.pdf_url == pdf_url,
+    ]
+    if title and title.strip():
+        clean_t = title.strip().lower()
+        conditions_stg.append(func.lower(StagingQueue.title) == clean_t)
+
+    stmt_stg = select(StagingQueue.id).where(or_(*conditions_stg))
     res_stg = await session.execute(stmt_stg)
     if res_stg.scalar_one_or_none():
         return True
 
-    stmt_mat = select(StudyMaterial.id).where(
-        or_(StudyMaterial.file_path == source_url, StudyMaterial.file_path == pdf_url)
-    )
+    conditions_mat = [
+        StudyMaterial.file_path == pdf_url,
+    ]
+    if title and title.strip():
+        clean_t = title.strip().lower()
+        conditions_mat.append(func.lower(StudyMaterial.title) == clean_t)
+
+    stmt_mat = select(StudyMaterial.id).where(or_(*conditions_mat))
     res_mat = await session.execute(stmt_mat)
     return res_mat.scalar_one_or_none() is not None
 
@@ -297,8 +310,9 @@ async def create_staging_item(
     year: Optional[int] = None,
 ) -> Optional[StagingQueue]:
     """Create a new staging queue draft item for admin review."""
-    if await is_url_already_known(session, source_url, pdf_url):
+    if await is_url_already_known(session, source_url=source_url, pdf_url=pdf_url, title=title):
         return None
+
 
     item = StagingQueue(
         title=title,

@@ -471,9 +471,11 @@ class ScraperOrchestrator:
                             session=session,
                             source_url=notice.source_url,
                             pdf_url=notice.pdf_url,
+                            title=notice.title,
                         )
                         if is_known:
                             continue
+
 
                         staging_item = await crud.create_staging_item(
                             session=session,
