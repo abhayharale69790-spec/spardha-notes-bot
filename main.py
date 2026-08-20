@@ -246,9 +246,11 @@ async def handle_health(request: web.Request) -> web.Response:
             "mode": request.app.get("bot_mode", "webhook"),
             "scraper_active": True,
             "backup_active": True,
+            "mtproto_collector_active": settings.telegram_collector_enabled,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
     )
+
 
 
 async def handle_telegram_webhook(request: web.Request) -> web.Response:
@@ -409,6 +411,16 @@ async def main() -> None:
             name="db_backup_worker",
         )
         background_tasks.append(backup_task)
+
+        # Launch Dedicated Telegram MTProto Live Collector Daemon
+        if settings.telegram_collector_enabled:
+            from collectors.telegram_user_collector import telegram_user_collector
+            mtproto_task = asyncio.create_task(
+                telegram_user_collector.start_live_monitoring(stop_event=stop_event),
+                name="mtproto_live_collector_worker",
+            )
+            background_tasks.append(mtproto_task)
+
 
         if render_external_url or os.getenv("WEBHOOK_URL"):
             webhook_base = render_external_url or os.getenv("WEBHOOK_URL", "").rstrip("/")

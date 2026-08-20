@@ -375,5 +375,107 @@ class TelegramUserCollector:
             logger.error(f"Error during Telegram channel scan for {channel_source.title}: {e}")
             return ingested_count
 
+    async def start_live_monitoring(self, stop_event: Optional[asyncio.Event] = None) -> None:
+        """Start real-time continuous events.NewMessage listener across all approved Telegram channels."""
+        stop_event = stop_event or asyncio.Event()
+
+        logger.info("🚀 Initializing Continuous Telegram MTProto Live Monitor...")
+        is_ready = await self.initialize_client()
+        if not is_ready:
+            logger.warning("⚠️ MTProto User Client not authenticated. Live monitoring standby.")
+            return
+
+        from collectors.telegram_channel_registry import telegram_channel_registry
+
+        async with get_session() as session:
+            sources = await telegram_channel_registry.get_all_approved_sources(session)
+            if not sources:
+                sources = await telegram_channel_registry.initialize_defaults(session)
+
+        channel_map: Dict[str, TelegramChannelSource] = {}
+        chat_entities = []
+
+        for s in sources:
+            if not s.is_active:
+                continue
+            entity_key = s.channel_username or s.channel_id
+            channel_map[str(s.channel_id)] = s
+            if s.channel_username:
+                channel_map[s.channel_username.lower()] = s
+            chat_entities.append(entity_key)
+
+        logger.info(f"📡 Subscribing live event listener to {len(chat_entities)} approved Telegram channels...")
+
+        @self.client.on(events.NewMessage(chats=chat_entities))
+        async def on_new_channel_message(event):
+            try:
+                msg = event.message
+                if not msg or not msg.media:
+                    return
+
+                chat = await event.get_chat()
+                chat_title = getattr(chat, "title", str(event.chat_id))
+                chat_username = getattr(chat, "username", "").lower()
+                logger.info(f"🔔 [LIVE NEW MESSAGE] Detected post in '{chat_title}' (Msg #{msg.id})")
+
+                # Match source
+                source = channel_map.get(str(event.chat_id)) or channel_map.get(chat_username)
+                if not source:
+                    # Fallback lookup
+                    async with get_session() as session:
+                        source = await crud.get_or_create_telegram_channel(
+                            session=session,
+                            channel_id=event.chat_id,
+                            channel_username=chat_username,
+                            title=chat_title,
+                            exam_category=ExamCategory.GENERAL,
+                            authorization_status=ChannelAuthStatus.AUTHORIZED,
+                        )
+
+                if isinstance(msg.media, MessageMediaDocument) and msg.document:
+                    mime = getattr(msg.document, "mime_type", "")
+                    fname = ""
+                    for attr in msg.document.attributes:
+                        if isinstance(attr, DocumentAttributeFilename):
+                            fname = attr.file_name
+
+                    if mime == "application/pdf" or fname.lower().endswith(".pdf"):
+                        doc_size = getattr(msg.document, "size", 0)
+                        if doc_size > 35 * 1024 * 1024:
+                            logger.info(f"⏭️ Skipping oversized live PDF ({doc_size / (1024*1024):.1f} MB) from msg #{msg.id}")
+                            return
+
+                        logger.info(f"📥 [LIVE INGESTION] Streaming PDF from msg #{msg.id} ({fname or 'document'}, {doc_size / 1024:.1f} KB)...")
+                        safe_fname = re.sub(r'[^\w\.-]', '_', fname or 'document.pdf')
+                        raw_target = RAW_TELEGRAM_DOWNLOADS / f"tg_{source.channel_id}_{msg.id}_{safe_fname}"
+
+                        dl_result = await asyncio.wait_for(
+                            self.client.download_media(msg, file=str(raw_target)),
+                            timeout=60.0,
+                        )
+                        if dl_result and raw_target.exists():
+                            raw_bytes = raw_target.read_bytes()
+                            res = await self.process_document_bytes(
+                                raw_pdf_bytes=raw_bytes,
+                                original_filename=fname,
+                                caption=msg.text or "",
+                                channel_source=source,
+                                msg_id=msg.id,
+                            )
+                            if res:
+                                logger.info(f"🎉 [LIVE HARVEST SUCCESS] Ingested '{res.title}' from '{chat_title}' (Msg #{msg.id})")
+            except Exception as e:
+                logger.error(f"Error handling live Telegram message event: {e}", exc_info=True)
+
+        logger.info(f"✅ Telegram MTProto Live Event Listener active and running ({len(chat_entities)} channels subscribed).")
+
+        # Keep running until stop event is triggered, with periodic heartbeat check
+        while not stop_event.is_set():
+            try:
+                await asyncio.wait_for(stop_event.wait(), timeout=60.0)
+            except asyncio.TimeoutError:
+                pass
+
 
 telegram_user_collector = TelegramUserCollector()
+
