@@ -81,24 +81,28 @@ class ResilientHttpClient:
                 response.raise_for_status()
             return response
 
-    async def get_text(self, url: str, timeout: float = 25.0) -> str:
-        """Fetch webpage HTML text with automatic SSL fallback on expired Indian government certs."""
-        try:
-            # 1. Attempt standard secure fetch
-            resp = await self._fetch_with_retry(url=url, timeout=timeout, verify_ssl=True)
-            return resp.text
-        except (httpx.ConnectError, httpx.RequestError) as ssl_err:
-            logger.warning(f"SSL/Connection issue for {url}. Retrying with verify=False fallback... Details: {ssl_err}")
+    async def get_text(self, url: str, timeout: float = 12.0) -> str:
+        """Fetch webpage HTML text safely with SSL fallback and fast timeout."""
+        await self._throttle_domain(url)
+        headers = self._get_random_headers()
+
+        for verify_ssl in (True, False):
             try:
-                # 2. Fallback without SSL verification (Handles expired govt certs)
-                resp = await self._fetch_with_retry(url=url, timeout=timeout, verify_ssl=False)
-                return resp.text
+                async with httpx.AsyncClient(
+                    verify=verify_ssl,
+                    follow_redirects=True,
+                    timeout=timeout,
+                ) as client:
+                    resp = await client.get(url, headers=headers)
+                    if resp.status_code == 200:
+                        return resp.text
             except Exception as e:
-                logger.error(f"Failed to fetch {url} after SSL fallback: {e}")
-                return ""
-        except Exception as e:
-            logger.error(f"Unrecoverable fetch error for {url}: {e}")
-            return ""
+                logger.debug(f"Fetch attempt (verify={verify_ssl}) for {url} failed: {e}")
+                continue
+
+        logger.warning(f"Could not fetch {url} after secure and fallback attempts.")
+        return ""
+
 
     async def download_file(self, url: str, destination_path: Path, timeout: float = 60.0) -> bool:
         """Download remote PDF file to disk cache with SSL fallback."""

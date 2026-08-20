@@ -148,12 +148,13 @@ DEFAULT_REGISTERED_SOURCES: List[RegisteredSource] = [
         source_id="ssc_cgl_portal",
         name="Staff Selection Commission (SSC CGL/CHSL)",
         source_type=SourceType.PORTAL,
-        url="https://ssc.nic.in/",
+        url="https://ssc.gov.in/",
         exam_category=ExamCategory.SSC,
         default_subject="Quantitative Maths & English",
         default_material_type=MaterialType.PYQ,
         language="Bilingual",
     ),
+
 
     # 6. Maharashtra Government Resolutions
     RegisteredSource(
@@ -214,6 +215,11 @@ class SourceRegistry:
     def get_sources_by_category(self, category: ExamCategory) -> List[RegisteredSource]:
         """Filter registered sources by target exam category."""
         return [s for s in self._sources.values() if s.exam_category == category and s.enabled]
+
+    def get_sources_for_category(self, category: ExamCategory) -> List[RegisteredSource]:
+        """Alias for get_sources_by_category."""
+        return self.get_sources_by_category(category)
+
 
     def register_source(self, source: RegisteredSource) -> None:
         """Register a new custom source dynamically."""
