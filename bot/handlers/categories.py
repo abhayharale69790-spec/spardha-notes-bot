@@ -448,8 +448,45 @@ async def handle_material_download(
             except Exception as e:
                 logger.warning(f"Failed sending local file: {e}")
 
-        # Case 3: Verified Working Portal Study Card
+        # Case 3: Remote Live PDF Download, Auto-Watermark & In-Chat Telegram Document Delivery
+        if material.file_path.startswith("http"):
+            try:
+                async with httpx.AsyncClient(timeout=12.0, verify=False) as client:
+                    resp = await client.get(
+                        material.file_path,
+                        headers={
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+                            "Accept": "application/pdf,*/*",
+                        },
+                        follow_redirects=True,
+                    )
+                    if resp.status_code == 200 and len(resp.content) > 1000 and resp.content.startswith(b"%PDF-"):
+                        temp_dir = Path("downloads")
+                        temp_dir.mkdir(parents=True, exist_ok=True)
+                        temp_pdf = temp_dir / f"mat_{material.id}_raw.pdf"
+                        temp_pdf.write_bytes(resp.content)
+
+                        # Apply HARALE DIGITAL STUDY POINT Branding
+                        branded_path = apply_harale_branding_to_pdf(str(temp_pdf))
+                        input_file = FSInputFile(branded_path, filename=f"{material.title[:35]}.pdf")
+
+                        sent_msg = await bot.send_document(
+                            chat_id=target_chat_id,
+                            document=input_file,
+                            caption=caption,
+                        )
+                        if sent_msg.document:
+                            async with get_session() as session:
+                                await crud.update_material_telegram_file_id(
+                                    session, material_id=material.id, telegram_file_id=sent_msg.document.file_id
+                                )
+                        return
+            except Exception as dl_err:
+                logger.debug(f"Direct PDF download delivery bypassed to portal card: {dl_err}")
+
+        # Case 4: Verified Working Portal Study Card (when remote direct stream is protected/portal landing)
         working_url = get_working_portal_url(material)
+
 
         download_buttons = [
             [

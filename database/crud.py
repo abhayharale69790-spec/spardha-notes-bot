@@ -312,7 +312,7 @@ async def is_url_already_known(
 
     stmt_stg = select(StagingQueue.id).where(or_(*conditions_stg))
     res_stg = await session.execute(stmt_stg)
-    if res_stg.scalar_one_or_none():
+    if res_stg.scalars().first():
         return True
 
     conditions_mat = [
@@ -324,7 +324,8 @@ async def is_url_already_known(
 
     stmt_mat = select(StudyMaterial.id).where(or_(*conditions_mat))
     res_mat = await session.execute(stmt_mat)
-    return res_mat.scalar_one_or_none() is not None
+    return res_mat.scalars().first() is not None
+
 
 
 async def create_staging_item(

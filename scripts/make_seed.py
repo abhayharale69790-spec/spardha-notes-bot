@@ -1,8 +1,8 @@
-"""Pre-Launch Initial Seeder and Coverage Audit Engine.
+content = """\"\"\"Pre-Launch Initial Seeder and Coverage Audit Engine.
 
 Builds a comprehensive, verified study-material repository across all 10 exam categories
 before student launch and verifies end-to-end library coverage.
-"""
+\"\"\"
 
 import asyncio
 import hashlib
@@ -114,9 +114,9 @@ async def seed_pre_launch_catalog() -> int:
                 continue
 
             extracted_text = (
-                f"अधिकृत अभ्यास साहित्य: {title}\n"
-                f"परीक्षा प्रवर्ग: {cat.value} | विषय: {subj} | घटक: {topic}\n"
-                f"भाषा: {lang} | वर्ष: {yr} | स्रोत: {src_name}\n"
+                f"अधिकृत अभ्यास साहित्य: {title}\\n"
+                f"परीक्षा प्रवर्ग: {cat.value} | विषय: {subj} | घटक: {topic}\\n"
+                f"भाषा: {lang} | वर्ष: {yr} | स्रोत: {src_name}\\n"
                 f"स्पर्धा परीक्षा व शैक्षणिक तयारीसाठी प्रमाणित डिजिटल संदर्भ साहित्य."
             )
 
@@ -158,14 +158,14 @@ async def run_coverage_audit() -> Dict[str, Dict[str, int]]:
         coverage = await crud.get_exam_coverage_summary(session)
         stats = await crud.get_admin_dashboard_stats(session)
 
-    print('\n' + '=' * 75)
+    print('\\n' + '=' * 75)
     print(' 📊 PRE-LAUNCH STUDY MATERIAL COVERAGE AUDIT REPORT')
     print('=' * 75)
-    print(f'🌟 Total Verified Materials: {stats["total_verified"]}')
-    print(f'🌐 Sources Configured:       {stats["sources_scanned"]} Sources')
+    print(f'🌟 Total Verified Materials: {stats[\"total_verified\"]}')
+    print(f'🌐 Sources Configured:       {stats[\"sources_scanned\"]} Sources')
     print(f'📁 Categories Covered:       {len(coverage)} / 10 Exam Tiers')
     print('-' * 75)
-    print(f'{"EXAM CATEGORY":<20} | {"SUBJECT":<32} | {"COUNT":<6}')
+    print(f'{\"EXAM CATEGORY\":<20} | {\"SUBJECT\":<32} | {\"COUNT\":<6}')
     print('-' * 75)
 
     for cat_name, subj_dict in sorted(coverage.items()):
@@ -176,7 +176,7 @@ async def run_coverage_audit() -> Dict[str, Dict[str, int]]:
             first_row = False
         print('-' * 75)
 
-    print('\n✅ PRE-LAUNCH SYSTEM STATUS: READY FOR VERIFICATION & TEST VALIDATION\n')
+    print('\\n✅ PRE-LAUNCH SYSTEM STATUS: READY FOR VERIFICATION & TEST VALIDATION\\n')
     return coverage
 
 
@@ -187,3 +187,8 @@ async def main():
 
 if __name__ == '__main__':
     asyncio.run(main())
+"""
+
+with open("scripts/initial_seed.py", "w", encoding="utf-8") as f:
+    f.write(content)
+print("SUCCESS")
