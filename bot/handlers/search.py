@@ -1,8 +1,9 @@
-"""Inline, Command-based, and Natural Language Search Handlers for Fast Study Material Discovery."""
+"""Movie-Finder Style Study Material Discovery Engine with Natural Language & Hybrid AI Ranking."""
 
 import hashlib
 import html
-from typing import List
+import re
+from typing import List, Optional
 from aiogram import Router, Bot, F
 from aiogram.filters import Command, CommandObject
 from aiogram.types import (
@@ -15,8 +16,11 @@ from aiogram.types import (
 )
 from database.session import get_session
 from database import crud
+from database.models import StudyMaterial
 from bot.keyboards.inline_menus import (
     MaterialDownloadCallback,
+    CategoryNavCallback,
+    NavAction,
     CATEGORY_LABELS,
     MATERIAL_TYPE_LABELS,
 )
@@ -24,33 +28,73 @@ from bot.handlers.categories import get_working_portal_url
 
 search_router = Router(name="search_router")
 
+# Conversational stop words and filler phrases to clean from student queries
+CONVERSATIONAL_STOPWORDS = {
+    "मला", "पाहिजे", "पाहिजेत", "हवे", "आहे", "आहेत", "द्या", "पाठवा", "कृपया",
+    "please", "give", "me", "i", "want", "need", "find", "search", "pdf",
+    "notes", "book", "material", "download", "बद्दल", "चे", "च्या", "साठी", "मधील", "आणि",
+}
+
+
+def clean_student_conversational_query(raw_query: str) -> str:
+    """Strip conversational filler words to extract core exam/subject/year intent."""
+    tokens = raw_query.strip().split()
+    cleaned_tokens = [t for t in tokens if t.lower() not in CONVERSATIONAL_STOPWORDS]
+    cleaned = " ".join(cleaned_tokens).strip()
+    return cleaned if len(cleaned) >= 2 else raw_query.strip()
+
+
+
+def format_movie_style_card(item: StudyMaterial) -> str:
+    """Format single study material card in clean Movie-Finder style."""
+    cat_str = item.exam_category.value if hasattr(item.exam_category, "value") else str(item.exam_category)
+    type_str = item.material_type.value if hasattr(item.material_type, "value") else str(item.material_type)
+    cat_label = CATEGORY_LABELS.get(cat_str, cat_str)
+    type_label = MATERIAL_TYPE_LABELS.get(type_str, type_str)
+    safe_title = html.escape(item.title)
+
+    year_str = f"[{item.year}] " if item.year else ""
+
+    card = (
+        f"🎬 <b>{year_str}{safe_title}</b>\n"
+        f"⭐️ <b>गुणवत्ता (Quality):</b> 🌟🌟🌟🌟🌟 <i>Verified Material</i>\n"
+        f"🏛️ <b>परीक्षा प्रवर्ग:</b> #{cat_label}\n"
+        f"📖 <b>विषय (Subject):</b> {item.subject}\n"
+        f"🏷️ <b>प्रकार (Type):</b> {type_label}\n"
+    )
+    if item.year:
+        card += f"📅 <b>वर्ष / आवृत्ती:</b> {item.year}\n"
+
+    card += "\n📥 <i>मोफत डाऊनलोड करण्यासाठी खालील बटनावर टॅप करा:</i>"
+    return card
+
 
 # ------------------------------------------------------------------------------
-# 1. Text Command Search Handler: /search <keywords>
+# 1. Text Command Search Handler: /search, /find, /shodh
 # ------------------------------------------------------------------------------
 @search_router.message(Command("search", "find", "shodh"))
 async def handle_search_command(message: Message, command: CommandObject) -> None:
-    """Handle /search, /find, or /shodh command with keyword query."""
+    """Handle /search command with keyword query."""
     query = command.args
 
     if not query or not query.strip():
         guide_text = (
-            "🔍 <b>अभ्यास साहित्य शोधा (Search Study Materials):</b>\n\n"
-            "कसे शोधावे (How to search):\n"
-            "• <code>/search Polity 2024</code>\n"
-            "• <code>/search MPSC History</code>\n"
-            "• <code>/search पोलीस भरती गणित</code>\n"
-            "• <code>/search शासन निर्णय</code>\n\n"
-            "💡 <i>किंवा थेट कोणताही विषय या चॅटमध्ये टाईप करा!</i>"
+            "🎬 <b>अभ्यास साहित्य शोध इंजिन (Study Material Finder):</b>\n\n"
+            "कसे शोधावे (Movie-Style Search Examples):\n"
+            "• <code>/search 10th SSC Maths 2024</code>\n"
+            "• <code>/search JEE Main Physics Formulas</code>\n"
+            "• <code>/search MPSC राज्यशास्त्र PYQ</code>\n"
+            "• <code>/search पोलीस भरती सराव पेपर</code>\n\n"
+            "💡 <i>किंवा थेट कोणताही विषय या चॅटमध्ये टाईप करा (उदा: 'तलाठी गणित').</i>"
         )
         await message.answer(guide_text)
         return
 
-    await execute_and_reply_search(message, query=query.strip())
+    await execute_movie_style_search(message, raw_query=query.strip())
 
 
 # ------------------------------------------------------------------------------
-# 2. Natural Language Plain-Text Fallback Search (User directly types keywords)
+# 2. Natural Language Plain-Text Fallback Search (User naturally types keywords)
 # ------------------------------------------------------------------------------
 @search_router.message(F.text & ~F.text.startswith("/"))
 async def handle_natural_text_search(message: Message) -> None:
@@ -63,39 +107,113 @@ async def handle_natural_text_search(message: Message) -> None:
     if query in ["📚 अभ्यास साहित्य (Study Material)", "📑 शासन निर्णय (GR)", "📝 प्रश्नपत्रिका (PYQ)"]:
         return
 
-    await execute_and_reply_search(message, query=query)
+    await execute_movie_style_search(message, raw_query=query)
 
 
-async def execute_and_reply_search(message: Message, query: str) -> None:
-    """Search materials with RapidFuzz + AI embeddings and render results."""
+async def execute_movie_style_search(message: Message, raw_query: str) -> None:
+    """Execute RapidFuzz + AI embeddings search and render Movie-Finder style response."""
+    core_query = clean_student_conversational_query(raw_query)
+
     async with get_session() as session:
-        results = await crud.search_study_materials(session, query=query, limit=8)
+        # Search with core cleaned keywords first
+        results = await crud.search_study_materials(session, query=core_query, limit=6)
+        
+        # Fallback to raw query if core query produced 0 results
+        if not results and core_query != raw_query:
+            results = await crud.search_study_materials(session, query=raw_query, limit=6)
 
-    safe_query = html.escape(query)
+    safe_query = html.escape(raw_query)
 
     if not results:
-        await message.answer(
-            f"🔍 <b>'{safe_query}'</b> साठी कोणतेही साहित्य आढळले नाही.\n"
-            f"कृपया वेगळे शब्द वापरून पुन्हा प्रयत्न करा किंवा /categories मधून निवडा."
+        not_found_text = (
+            f"🔍 <b>'{safe_query}'</b> साठी कोणतेही अचूक साहित्य आढळले नाही.\n\n"
+            f"💡 <b>शोध टिप्स:</b>\n"
+            f"• विषयाचे किंवा परीक्षेचे नाव बदला (उदा: <code>MPSC</code>, <code>पोलीस भरती</code>, <code>10th Board</code>, <code>JEE</code>)\n"
+            f"• किंवा खालील मेन्यूमधून थेट परीक्षा निवडा."
         )
+        keyboard = InlineKeyboardMarkup(
+            inline_keyboard=[
+                [
+                    InlineKeyboardButton(
+                        text="📚 सर्व परीक्षा यादी (Browse Exams)",
+                        callback_data=CategoryNavCallback(action=NavAction.EXAMS.value).pack(),
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        text="🏠 मुख्य मेनू",
+                        callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                    )
+                ],
+            ]
+        )
+        await message.answer(not_found_text, reply_markup=keyboard)
         return
 
+    # Case A: Exactly 1 result -> Show full Movie-Style detail card
+    if len(results) == 1:
+        item = results[0]
+        card_text = format_movie_style_card(item)
+        working_url = get_working_portal_url(item)
+
+        buttons = [
+            [
+                InlineKeyboardButton(
+                    text="📥 थेट डाऊनलोड करा (Download PDF)",
+                    callback_data=MaterialDownloadCallback(material_id=item.id).pack(),
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🌐 अधिकृत पोर्टल",
+                    url=working_url,
+                ),
+                InlineKeyboardButton(
+                    text="📢 शेअर करा",
+                    url=f"https://t.me/share/url?url=https://t.me/SpardhaNotes_bot?start=mat_{item.id}&text={item.title}",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    text="🏠 मुख्य मेनू",
+                    callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+                )
+            ],
+        ]
+        keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
+        await message.answer(card_text, reply_markup=keyboard)
+        return
+
+    # Case B: Multiple results -> Movie-Finder Results List
     response_text = (
-        f"🔍 <b>'{safe_query}'</b> चे शोध परिणाम (Search Results):\n"
-        f"<i>दस्तऐवज मिळवण्यासाठी खालील बटनावर टॅप करा:</i>"
+        f"🎬 <b>शोध परिणाम (Search Results) for:</b> <i>'{safe_query}'</i>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"<i>खालीलपैकी हवे असलेले अभ्यास साहित्य निवडा:</i>"
     )
 
     buttons = []
-    for item in results:
+    for idx, item in enumerate(results, 1):
         cat_str = item.exam_category.value if hasattr(item.exam_category, "value") else str(item.exam_category)
-        safe_title = html.escape(item.title[:38])
-        btn_text = f"📄 {safe_title} [{cat_str}]"
+        year_tag = f" '{str(item.year)[-2:]}" if item.year else ""
+        btn_text = f"📄 [{idx}] {item.title[:34]}{year_tag} [{cat_str}]"
         buttons.append([
             InlineKeyboardButton(
                 text=btn_text,
                 callback_data=MaterialDownloadCallback(material_id=item.id).pack(),
             )
         ])
+
+    # Footer navigation controls
+    buttons.append([
+        InlineKeyboardButton(
+            text="📚 सर्व परीक्षा (All Exams)",
+            callback_data=CategoryNavCallback(action=NavAction.EXAMS.value).pack(),
+        ),
+        InlineKeyboardButton(
+            text="🏠 मुख्य मेनू",
+            callback_data=CategoryNavCallback(action=NavAction.MAIN.value).pack(),
+        ),
+    ])
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer(response_text, reply_markup=keyboard)
@@ -107,12 +225,13 @@ async def execute_and_reply_search(message: Message, query: str) -> None:
 @search_router.inline_query()
 async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
     """Handle instant inline search queries in any chat or group."""
-    query = inline_query.query.strip() if inline_query.query else ""
+    raw_query = inline_query.query.strip() if inline_query.query else ""
+    query = clean_student_conversational_query(raw_query) if raw_query else None
 
     async with get_session() as session:
         results = await crud.search_study_materials(
             session=session,
-            query=query if query else None,
+            query=query,
             limit=15,
         )
 
@@ -127,8 +246,9 @@ async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
         safe_title = html.escape(item.title)
 
         card_text = (
-            f"📚 <b>{safe_title}</b>\n"
-            f"🏛️ <b>परीक्षा:</b> {cat_label}\n"
+            f"🎬 <b>{safe_title}</b>\n"
+            f"⭐️ <b>गुणवत्ता:</b> 🌟🌟🌟🌟🌟 <i>Verified Notes</i>\n"
+            f"🏛️ <b>परीक्षा:</b> #{cat_label}\n"
             f"📖 <b>विषय:</b> {item.subject}\n"
             f"🏷️ <b>प्रकार:</b> {type_label}\n"
         )
@@ -138,7 +258,7 @@ async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
         card_text += f"\n🔗 <a href='{working_url}'>अधिकृत पोर्टलवर उघडा (Official Portal)</a>"
 
         # Unique ID for each inline result
-        result_id = hashlib.md5(f"mat_{item.id}_{query}".encode()).hexdigest()
+        result_id = hashlib.md5(f"mat_{item.id}_{raw_query}".encode()).hexdigest()
 
         reply_markup = InlineKeyboardMarkup(
             inline_keyboard=[

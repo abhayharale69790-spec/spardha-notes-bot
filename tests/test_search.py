@@ -99,3 +99,16 @@ async def test_marathi_maths_synonyms(search_db_session: AsyncSession):
 
     results_ganit = await crud.search_study_materials(search_db_session, query="गणित")
     assert len(results_ganit) >= 1
+
+
+@pytest.mark.asyncio
+async def test_conversational_student_query_cleaning(search_db_session: AsyncSession):
+    """Conversational phrases like 'मला गणिताचे नोट्स पाहिजेत' should return maths materials."""
+    from bot.handlers.search import clean_student_conversational_query
+    raw_prompt = "मला गणिताचे नोट्स पाहिजेत"
+    cleaned = clean_student_conversational_query(raw_prompt)
+    assert "पाहिजेत" not in cleaned
+    assert "मला" not in cleaned
+    results = await crud.search_study_materials(search_db_session, query=cleaned)
+    assert len(results) >= 1
+

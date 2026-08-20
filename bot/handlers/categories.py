@@ -480,20 +480,24 @@ async def handle_material_download(
             ],
         ]
 
+        safe_title = html.escape(material.title)
+        year_badge = f"[{material.year}] " if material.year else ""
         study_card_text = (
-            f"📄 <b>{material.title}</b>\n\n"
+            f"🎬 <b>{year_badge}{safe_title}</b>\n"
+            f"⭐️ <b>गुणवत्ता (Quality):</b> 🌟🌟🌟🌟🌟 <i>Verified Study Resource</i>\n"
             f"🏛️ <b>परीक्षा:</b> #{material.exam_category.value}\n"
             f"📖 <b>विषय:</b> {material.subject}\n"
-            f"🏷️ <b>साहित्य प्रकार:</b> #{material.material_type.value}\n"
+            f"🏷️ <b>प्रकार:</b> #{material.material_type.value}\n"
         )
         if material.year:
             study_card_text += f"📅 <b>वर्ष / आवृत्ती:</b> {material.year}\n"
 
         study_card_text += (
-            f"\n💡 <b>अभ्यास टिप (Study Tip):</b>\n"
-            f"सदर विषयाचा अधिकृत अभ्यासक्रम व मूळ साहित्य पाहण्यासाठी खालील 'अधिकृत पोर्टलवरून उघडा' बटनावर टॅप करा.\n\n"
-            f"📥 <i>Spardha Notes Hub — सर्व स्पर्धा परीक्षांसाठी मोफत डिजिटल व्यासपीठ</i>"
+            f"\n💡 <b>अभ्यास टिप (Study Guide):</b>\n"
+            f"सदर विषयाचे मूळ अधिकृत साहित्य पाहण्यासाठी खालील 'अधिकृत पोर्टलवरून उघडा' बटनावर टॅप करा.\n\n"
+            f"📥 <i>{settings.brand_name} — सर्व स्पर्धा परीक्षांसाठी मोफत डिजिटल व्यासपीठ</i>"
         )
+
 
         await bot.send_message(
             chat_id=target_chat_id,
