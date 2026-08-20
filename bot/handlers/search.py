@@ -19,6 +19,7 @@ from bot.keyboards.inline_menus import (
     CATEGORY_LABELS,
     MATERIAL_TYPE_LABELS,
 )
+from bot.handlers.categories import get_working_portal_url
 
 search_router = Router(name="search_router")
 
@@ -39,7 +40,7 @@ async def handle_search_command(message: Message, command: CommandObject) -> Non
             "• <code>/search MPSC History</code>\n"
             "• <code>/search पोलीस भरती गणित</code>\n"
             "• <code>/search शासन निर्णय</code>\n\n"
-            "💡 <i>किंवा थेट कोणत्याही चॅटमध्ये <code>@bot_username विषय</code> टाईप करून इनलाईन शोधा!</i>"
+            "💡 <i>किंवा थेट कोणत्याही चॅटमध्ये <code>@SpardhaNotes_bot विषय</code> टाईप करून इनलाईन शोधा!</i>"
         )
         await message.answer(guide_text)
         return
@@ -64,7 +65,6 @@ async def handle_search_command(message: Message, command: CommandObject) -> Non
 
     buttons = []
     for item in results:
-        type_str = item.material_type.value if hasattr(item.material_type, "value") else str(item.material_type)
         cat_str = item.exam_category.value if hasattr(item.exam_category, "value") else str(item.exam_category)
         btn_text = f"📄 {item.title[:38]} [{cat_str}]"
         buttons.append([
@@ -84,7 +84,7 @@ async def handle_search_command(message: Message, command: CommandObject) -> Non
 @search_router.inline_query()
 async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
     """Handle instant inline search queries in any chat or group."""
-    query = inline_query.query.strip()
+    query = inline_query.query.strip() if inline_query.query else ""
 
     async with get_session() as session:
         results = await crud.search_study_materials(
@@ -100,6 +100,7 @@ async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
         type_str = item.material_type.value if hasattr(item.material_type, "value") else str(item.material_type)
         cat_label = CATEGORY_LABELS.get(cat_str, cat_str)
         type_label = MATERIAL_TYPE_LABELS.get(type_str, type_str)
+        working_url = get_working_portal_url(item)
 
         card_text = (
             f"📚 <b>{item.title}</b>\n"
@@ -110,7 +111,7 @@ async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
         if item.year:
             card_text += f"📅 <b>वर्ष:</b> {item.year}\n"
 
-        card_text += f"\n🔗 <a href='{item.file_path}'>दस्तऐवज पहा / डाउनलोड करा (Direct Link)</a>"
+        card_text += f"\n🔗 <a href='{working_url}'>अधिकृत पोर्टलवर उघडा (Official Portal)</a>"
 
         # Unique ID for each inline result
         result_id = hashlib.md5(f"mat_{item.id}_{query}".encode()).hexdigest()
@@ -119,8 +120,8 @@ async def handle_inline_search(inline_query: InlineQuery, bot: Bot) -> None:
             inline_keyboard=[
                 [
                     InlineKeyboardButton(
-                        text="📥 Download / Open",
-                        url=item.file_path if item.file_path.startswith("http") else "https://t.me",
+                        text="🌐 Open Official Portal",
+                        url=working_url,
                     )
                 ]
             ]

@@ -1,5 +1,6 @@
 """Asynchronous CRUD Operations with Cloud-Native Hybrid Search."""
 
+import re
 from typing import List, Optional, Sequence, Dict
 from rapidfuzz import fuzz, process
 from sqlalchemy import distinct, or_, select, update
@@ -40,15 +41,18 @@ SYNONYM_CLUSTERS: List[List[str]] = [
 ]
 
 
-def expand_bilingual_terms(query: str) -> List[str]:
+def expand_bilingual_terms(query: Optional[str]) -> List[str]:
     """Expand query terms using bidirectional synonym & transliteration clusters."""
+    if not query or not query.strip():
+        return []
+
     query_clean = query.strip().lower()
     terms = [query_clean]
-    words = query_clean.split()
+    words = re.findall(r"[\w\u0900-\u097F]+", query_clean)
 
     for cluster in SYNONYM_CLUSTERS:
         matched = False
-        # Direct phrase or word match
+        # Direct phrase match
         for item in cluster:
             if item in query_clean:
                 matched = True
@@ -138,7 +142,9 @@ async def search_study_materials(
     offset: int = 0,
 ) -> Sequence[StudyMaterial]:
     """Search study materials with Hybrid RapidFuzz + AI Ranking."""
-    if not query:
+    query_clean = query.strip() if query else ""
+
+    if not query_clean:
         # Standard filter query without text scoring
         stmt = select(StudyMaterial)
         if exam_category:
@@ -155,14 +161,16 @@ async def search_study_materials(
         return result.scalars().all()
 
     # 1. Expand query terms
-    expanded_terms = expand_bilingual_terms(query)
+    expanded_terms = expand_bilingual_terms(query_clean)
 
     # 2. Fetch candidates from DB matching any expanded term
     conditions = []
     for term in expanded_terms:
-        pattern = f"%{term}%"
-        conditions.append(StudyMaterial.title.ilike(pattern))
-        conditions.append(StudyMaterial.subject.ilike(pattern))
+        safe_term = term.replace("%", "").replace("_", "")
+        if safe_term:
+            pattern = f"%{safe_term}%"
+            conditions.append(StudyMaterial.title.ilike(pattern))
+            conditions.append(StudyMaterial.subject.ilike(pattern))
 
     stmt = select(StudyMaterial)
     if conditions:
@@ -196,7 +204,7 @@ async def search_study_materials(
 
     # 3. Hybrid AI + RapidFuzz Reciprocal Rank Fusion
     ranked = await rank_hybrid_materials(
-        query=query,
+        query=query_clean,
         candidates=candidates,
         expanded_terms=expanded_terms,
     )
@@ -343,12 +351,16 @@ async def add_to_staging_queue(
 
 async def update_staging_status(
     session: AsyncSession,
-    item_id: int,
-    status: StagingStatus,
+    staging_id: Optional[int] = None,
+    item_id: Optional[int] = None,
+    status: StagingStatus = StagingStatus.PENDING,
     staging_message_id: Optional[int] = None,
 ) -> Optional[StagingQueue]:
     """Update moderation status and message ID for a staging queue draft."""
-    stg_item = await get_staging_item_by_id(session, item_id)
+    sid = staging_id if staging_id is not None else item_id
+    if sid is None:
+        return None
+    stg_item = await get_staging_item_by_id(session, staging_id=sid)
     if stg_item:
         stg_item.status = status
         if staging_message_id is not None:
@@ -361,10 +373,14 @@ async def update_staging_status(
 
 async def get_staging_item_by_id(
     session: AsyncSession,
-    staging_id: int,
+    staging_id: Optional[int] = None,
+    item_id: Optional[int] = None,
 ) -> Optional[StagingQueue]:
-    """Fetch staging item by ID."""
-    stmt = select(StagingQueue).where(StagingQueue.id == staging_id)
+    """Fetch staging item by ID supporting either staging_id or item_id parameter."""
+    sid = staging_id if staging_id is not None else item_id
+    if sid is None:
+        return None
+    stmt = select(StagingQueue).where(StagingQueue.id == sid)
     result = await session.execute(stmt)
     return result.scalar_one_or_none()
 
@@ -375,7 +391,7 @@ async def approve_staging_item(
     telegram_file_id: Optional[str] = None,
 ) -> Optional[StudyMaterial]:
     """Approve a staging draft and promote it to verified study material."""
-    stg_item = await get_staging_item_by_id(session, staging_id)
+    stg_item = await get_staging_item_by_id(session, staging_id=staging_id)
     if not stg_item or stg_item.status != StagingStatus.PENDING:
         return None
 
@@ -404,7 +420,7 @@ async def discard_staging_item(
     staging_id: int,
 ) -> bool:
     """Mark a staging draft item as rejected."""
-    stg_item = await get_staging_item_by_id(session, staging_id)
+    stg_item = await get_staging_item_by_id(session, staging_id=staging_id)
     if not stg_item or stg_item.status != StagingStatus.PENDING:
         return False
 

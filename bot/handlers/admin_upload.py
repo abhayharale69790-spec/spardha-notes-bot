@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import logging
 import uuid
 from aiogram import Router, Bot, F
+from aiogram.filters import Command
 from aiogram.filters.callback_data import CallbackData
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from config.settings import get_settings
@@ -15,6 +16,22 @@ from bot.middlewares.auth import IsAdminFilter
 logger = logging.getLogger(__name__)
 admin_upload_router = Router(name="admin_upload_router")
 settings = get_settings()
+
+
+@admin_upload_router.message(Command("upload"), IsAdminFilter())
+async def handle_upload_command(message: Message) -> None:
+    """Provide admin guide for uploading study material PDFs."""
+    text = (
+        "📤 <b>अभ्यास साहित्य अपलोड मोड (Admin Upload Mode):</b>\n\n"
+        "कृपया मला थेट <b>PDF फाईल</b> पाठवा (Document स्वरूपात).\n"
+        "बॉट आपोआप खालील प्रक्रिया पूर्ण करेल:\n"
+        "1️⃣ फाईलचा Telegram <code>file_id</code> कॅश करेल.\n"
+        "2️⃣ परीक्षा प्रवर्ग व विषय निवडून डेटाबेसमध्ये नोंद करेल.\n"
+        "3️⃣ मुख्य चॅनेलवर (@spardhanoteshub) थेट ब्रॉडकास्ट करण्याचा पर्याय देईल.\n\n"
+        "💡 <i>आताच कोणतीही PDF फाईल या चॅटमध्ये पाठवा.</i>"
+    )
+    await message.reply(text)
+
 
 
 class AdminUploadCallback(CallbackData, prefix="aup"):
