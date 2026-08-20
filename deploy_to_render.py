@@ -35,14 +35,16 @@ def deploy(render_api_key: str):
         "ownerId": owner_id,
         "repo": "https://github.com/abhayharale69790-spec/spardha-notes-bot",
         "branch": "main",
-        "runtime": "python",
-        "plan": "free",
-        "region": "oregon",
+        "autoDeploy": "yes",
         "serviceDetails": {
             "env": "python",
-            "buildCommand": "pip install --upgrade pip && pip install -r requirements.txt",
-            "startCommand": "python main.py",
+            "plan": "free",
+            "region": "oregon",
             "healthCheckPath": "/health",
+            "envSpecificDetails": {
+                "buildCommand": "pip install --upgrade pip && pip install -r requirements.txt",
+                "startCommand": "python main.py",
+            },
             "envVars": [
                 {"key": "PYTHON_VERSION", "value": "3.11.8"},
                 {"key": "BOT_TOKEN", "value": "8880658335:AAFf6yjx9L0SsXKoY-ucCX8soq-s1LRPTNs"},
@@ -60,9 +62,11 @@ def deploy(render_api_key: str):
     r_create = httpx.post(f"{RENDER_API_BASE}/services", headers=headers, json=payload, timeout=30.0)
     if r_create.status_code in (200, 201):
         svc_data = r_create.json()
+        svc = svc_data.get("service", {})
         print("3. Service successfully deployed to Render!")
-        print(f"   Service Name: {svc_data.get('service', {}).get('name')}")
-        print(f"   Service URL: {svc_data.get('service', {}).get('serviceDetails', {}).get('url', 'Building...')}")
+        print(f"   Service ID: {svc.get('id')}")
+        print(f"   Service Name: {svc.get('name')}")
+        print(f"   Live URL: {svc.get('serviceDetails', {}).get('url', 'Will appear after build')}")
         return True
     else:
         print(f"   Render API Response: {r_create.status_code} - {r_create.text}")
