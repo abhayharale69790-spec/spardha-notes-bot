@@ -91,7 +91,11 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         InlineKeyboardButton(
             text="📰 Daily Current Affairs (चालू घडामोडी)",
             callback_data=CategoryNavCallback(action=NavAction.CA_FEED.value).pack(),
-        )
+        ),
+        InlineKeyboardButton(
+            text="📊 Syllabus Coverage (कव्हरेज)",
+            callback_data="cov_overview",
+        ),
     )
     builder.row(
         InlineKeyboardButton(
@@ -100,6 +104,7 @@ def get_main_menu_keyboard() -> InlineKeyboardMarkup:
         )
     )
     return builder.as_markup()
+
 
 
 def get_categories_keyboard() -> InlineKeyboardMarkup:

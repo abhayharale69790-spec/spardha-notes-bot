@@ -6,10 +6,12 @@ from aiogram.enums import ParseMode
 from config.settings import get_settings
 from bot.middlewares.throttling import ThrottlingMiddleware
 from bot.handlers.start import start_router
+from bot.handlers.coverage import coverage_router
 from bot.handlers.categories import categories_router
 from bot.handlers.search import search_router
 from bot.handlers.admin_staging import admin_staging_router
 from bot.handlers.admin_upload import admin_upload_router
+
 
 
 def create_bot(token: str) -> Bot:
@@ -35,12 +37,14 @@ def create_dispatcher() -> Dispatcher:
 
     # Include modular routers
     dp.include_router(start_router)
+    dp.include_router(coverage_router)
     dp.include_router(categories_router)
     dp.include_router(search_router)
     dp.include_router(admin_staging_router)
     dp.include_router(admin_upload_router)
 
     return dp
+
 
 
 def setup_bot_and_dispatcher() -> tuple[Bot, Dispatcher]:
