@@ -47,30 +47,11 @@ for d in ("data", "downloads", "backups"):
 async def auto_seed_catalog_if_empty() -> None:
     """Ensure database is automatically pre-populated with study materials on boot."""
     try:
-        async with get_session() as session:
-            stmt = select(func.count(StudyMaterial.id))
-            result = await session.execute(stmt)
-            count = result.scalar_one_or_none() or 0
-
-            if count < len(BULK_MATERIALS):
-                logger.info(f"Database contains {count} items. Auto-seeding initial study materials catalog...")
-                for item in BULK_MATERIALS:
-                    is_known = await crud.is_url_already_known(session, item["file_path"], item["title"])
-                    if not is_known:
-                        await crud.create_study_material(
-                            session=session,
-                            title=item["title"],
-                            exam_category=item["exam_category"],
-                            subject=item["subject"],
-                            material_type=item["material_type"],
-                            file_path=item["file_path"],
-                            year=item["year"],
-                        )
-                logger.info("Automatic catalog auto-seeding completed successfully!")
-            else:
-                logger.info(f"Database fully populated with {count} study materials.")
+        from scripts.initial_seed import seed_pre_launch_catalog
+        await seed_pre_launch_catalog()
     except Exception as e:
-        logger.error(f"Auto-seed catalog error: {e}", exc_info=True)
+        logger.error(f"Auto-seed error on startup: {e}", exc_info=True)
+
 
 
 # ==============================================================================

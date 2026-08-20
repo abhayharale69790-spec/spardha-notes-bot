@@ -1,4 +1,4 @@
-"""SQLAlchemy 2.0 Database Models with High-Performance Indexing."""
+"""SQLAlchemy 2.0 Database Models with Extended Ingestion Telemetry & Indexing."""
 
 from datetime import datetime, timezone
 import enum
@@ -66,7 +66,7 @@ def utc_now() -> datetime:
 
 
 class StudyMaterial(Base):
-    """Verified competitive exam study materials repository."""
+    """Verified competitive exam study materials repository with full metadata & hashes."""
 
     __tablename__ = "study_materials"
 
@@ -79,6 +79,8 @@ class StudyMaterial(Base):
         index=True,
     )
     subject: Mapped[str] = mapped_column(String(100), default="General", nullable=False, index=True)
+    topic: Mapped[Optional[str]] = mapped_column(String(200), nullable=True, default="General", index=True)
+    language: Mapped[str] = mapped_column(String(50), nullable=False, default="Marathi", index=True)
     material_type: Mapped[MaterialType] = mapped_column(
         SAEnum(MaterialType, native_enum=False),
         default=MaterialType.GR,
@@ -86,7 +88,12 @@ class StudyMaterial(Base):
         index=True,
     )
     year: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, index=True)
+    source_name: Mapped[str] = mapped_column(String(200), nullable=False, default="Official Portal", index=True)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
+    content_hash: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    extracted_text: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    quality_score: Mapped[int] = mapped_column(Integer, nullable=False, default=100, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default="VERIFIED", index=True)
     telegram_file_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -99,6 +106,7 @@ class StudyMaterial(Base):
         Index("ix_materials_lookup", "exam_category", "subject", "material_type", "year"),
         Index("ix_materials_search_opt", "exam_category", "material_type", "created_at"),
         Index("ix_materials_file_id", "telegram_file_id"),
+        Index("ix_materials_content_hash", "content_hash"),
     )
 
     def __repr__(self) -> str:
@@ -149,3 +157,30 @@ class StagingQueue(Base):
 
     def __repr__(self) -> str:
         return f"<StagingQueue(id={self.id}, status='{self.status}', title='{self.title[:30]}')>"
+
+
+class IngestionMetric(Base):
+    """Audit metrics and ingestion telemetry for background harvesting workers."""
+
+    __tablename__ = "ingestion_metrics"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    source_id: Mapped[str] = mapped_column(String(100), index=True)
+    source_name: Mapped[str] = mapped_column(String(200), nullable=False)
+    source_type: Mapped[str] = mapped_column(String(50), default="PORTAL", index=True)
+    files_scanned: Mapped[int] = mapped_column(Integer, default=0)
+    files_downloaded: Mapped[int] = mapped_column(Integer, default=0)
+    files_processed: Mapped[int] = mapped_column(Integer, default=0)
+    duplicates_detected: Mapped[int] = mapped_column(Integer, default=0)
+    failures_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(50), default="SUCCESS", index=True)
+    details: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=utc_now,
+        nullable=False,
+        index=True,
+    )
+
+    def __repr__(self) -> str:
+        return f"<IngestionMetric(id={self.id}, source='{self.source_name}', processed={self.files_processed}, status='{self.status}')>"

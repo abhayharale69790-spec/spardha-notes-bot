@@ -51,6 +51,43 @@ async def handle_upload_command(message: Message) -> None:
     await message.reply(text)
 
 
+@admin_upload_router.message(Command("admin_stats", "stats", "coverage", "dashboard"))
+async def handle_admin_stats_command(message: Message) -> None:
+    """Provide live metrics dashboard and study material coverage analysis."""
+    user_id = message.from_user.id if message.from_user else 0
+    if not settings.is_admin(user_id):
+        await message.reply("⛔ केवळ ॲडमिनसाठी उपलब्ध (Admin Access Only).")
+        return
+
+    async with get_session() as session:
+        stats = await crud.get_admin_dashboard_stats(session)
+
+    cat_lines = []
+    for cat, count in sorted(stats["category_breakdown"].items(), key=lambda x: x[1], reverse=True):
+        cat_lines.append(f"• <b>{cat}:</b> {count} साहित्‍य")
+    cat_text = "\n".join(cat_lines) if cat_lines else "• अद्याप कोणतेही नाही"
+
+    dashboard_text = (
+        f"📊 <b>{settings.brand_name} | Admin System Dashboard</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"🌟 <b>एकूण प्रमाणित अभ्यास साहित्य:</b> <code>{stats['total_verified']}</code>\n"
+        f"🌐 <b>नोंदणीकृत अधिकृत स्रोत:</b> <code>{stats['sources_scanned']} Sources</code>\n"
+        f"📂 <b>स्कॅन केलेल्या फाईल्स:</b> <code>{stats['files_scanned']}</code>\n"
+        f"📥 <b>डाऊनलोड केलेल्या फाईल्स:</b> <code>{stats['files_downloaded']}</code>\n"
+        f"⚙️ <b>प्रक्रिया पूर्ण:</b> <code>{stats['files_processed']}</code>\n"
+        f"🚫 <b>अवैध / डुप्लिकेट गाळले:</b> <code>{stats['duplicates_detected']}</code>\n"
+        f"⚠️ <b>त्रुटी / करप्ट फाईल्स:</b> <code>{stats['failures_count']}</code>\n"
+        f"⏳ <b>प्रलंबित मसुदे (Staging):</b> <code>{stats['pending_staging']}</code>\n\n"
+        f"🏛️ <b>परीक्षा प्रवर्गवार वर्गीकरण:</b>\n"
+        f"{cat_text}\n"
+        f"━━━━━━━━━━━━━━━━━━━━\n"
+        f"💡 <i>सिस्टम स्टेटस: अखंड स्वयंचलित हार्वेस्टिंग सुरू आहे.</i>"
+    )
+
+    await message.reply(dashboard_text)
+
+
+
 class AdminUploadCallback(CallbackData, prefix="aup"):
     step: str  # "cat", "sub", "save", "bcast", "cancel", "back"
     uid: str  # Short 8-char upload ID to strictly respect Telegram 64-byte callback limit

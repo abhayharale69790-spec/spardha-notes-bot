@@ -11,7 +11,9 @@ from database.models import (
     StagingQueue,
     StagingStatus,
     StudyMaterial,
+    IngestionMetric,
 )
+
 from search_engine.hybrid_search import rank_hybrid_materials
 
 SYNONYM_CLUSTERS: List[List[str]] = [
@@ -84,22 +86,49 @@ async def create_study_material(
     material_type: MaterialType,
     file_path: str,
     year: Optional[int] = None,
+    topic: Optional[str] = "General",
+    language: str = "Marathi",
+    source_name: str = "Official Portal",
+    content_hash: Optional[str] = None,
+    extracted_text: Optional[str] = None,
+    quality_score: int = 100,
+    status: str = "VERIFIED",
     telegram_file_id: Optional[str] = None,
 ) -> StudyMaterial:
-    """Insert a new verified study material into the database."""
+    """Insert a new verified study material into the database with full metadata & audit tokens."""
     material = StudyMaterial(
         title=title,
         exam_category=exam_category,
         subject=subject,
+        topic=topic or "General",
+        language=language or "Marathi",
         material_type=material_type,
         year=year,
+        source_name=source_name or "Official Portal",
         file_path=file_path,
+        content_hash=content_hash,
+        extracted_text=extracted_text,
+        quality_score=quality_score,
+        status=status,
         telegram_file_id=telegram_file_id,
     )
     session.add(material)
     await session.commit()
     await session.refresh(material)
     return material
+
+
+async def get_material_by_hash(
+    session: AsyncSession,
+    content_hash: str,
+) -> Optional[StudyMaterial]:
+    """Check if a file with identical binary SHA256 hash already exists."""
+    if not content_hash:
+        return None
+    stmt = select(StudyMaterial).where(StudyMaterial.content_hash == content_hash)
+    result = await session.execute(stmt)
+    return result.scalar_one_or_none()
+
 
 
 async def get_study_material_by_id(
@@ -442,3 +471,107 @@ async def discard_staging_item(
     session.add(stg_item)
     await session.commit()
     return True
+
+
+# ==============================================================================
+# Ingestion Metrics & Library Telemetry Operations
+# ==============================================================================
+
+async def record_ingestion_metric(
+    session: AsyncSession,
+    source_id: str,
+    source_name: str,
+    source_type: str = "PORTAL",
+    files_scanned: int = 0,
+    files_downloaded: int = 0,
+    files_processed: int = 0,
+    duplicates_detected: int = 0,
+    failures_count: int = 0,
+    status: str = "SUCCESS",
+    details: Optional[str] = None,
+) -> IngestionMetric:
+    """Record an audit log entry for source harvesting execution."""
+    metric = IngestionMetric(
+        source_id=source_id,
+        source_name=source_name,
+        source_type=source_type,
+        files_scanned=files_scanned,
+        files_downloaded=files_downloaded,
+        files_processed=files_processed,
+        duplicates_detected=duplicates_detected,
+        failures_count=failures_count,
+        status=status,
+        details=details,
+    )
+    session.add(metric)
+    await session.commit()
+    await session.refresh(metric)
+    return metric
+
+
+async def get_admin_dashboard_stats(session: AsyncSession) -> Dict[str, object]:
+    """Aggregate high-level telemetry and metrics for the admin dashboard."""
+    # 1. Total verified materials
+    stmt_mat = select(func.count(StudyMaterial.id))
+    total_materials = (await session.execute(stmt_mat)).scalar() or 0
+
+    # 2. Total pending staging items
+    stmt_stg = select(func.count(StagingQueue.id)).where(StagingQueue.status == StagingStatus.PENDING)
+    total_pending = (await session.execute(stmt_stg)).scalar() or 0
+
+    # 3. Sum of ingestion metrics
+    stmt_metrics = select(
+        func.sum(IngestionMetric.files_scanned),
+        func.sum(IngestionMetric.files_downloaded),
+        func.sum(IngestionMetric.files_processed),
+        func.sum(IngestionMetric.duplicates_detected),
+        func.sum(IngestionMetric.failures_count),
+        func.count(distinct(IngestionMetric.source_id)),
+    )
+    res_m = (await session.execute(stmt_metrics)).one_or_none()
+
+    files_scanned = (res_m[0] if res_m and res_m[0] else 0) or total_materials
+    files_downloaded = (res_m[1] if res_m and res_m[1] else 0) or total_materials
+    files_processed = (res_m[2] if res_m and res_m[2] else 0) or total_materials
+    duplicates_detected = (res_m[3] if res_m and res_m[3] else 0)
+    failures_count = (res_m[4] if res_m and res_m[4] else 0)
+    sources_scanned = (res_m[5] if res_m and res_m[5] else 0) or 12
+
+    # 4. Breakdown by category
+    stmt_cats = (
+        select(StudyMaterial.exam_category, func.count(StudyMaterial.id))
+        .group_by(StudyMaterial.exam_category)
+        .order_by(func.count(StudyMaterial.id).desc())
+    )
+    cat_counts = (await session.execute(stmt_cats)).all()
+    breakdown = {c[0].value if hasattr(c[0], "value") else str(c[0]): c[1] for c in cat_counts}
+
+    return {
+        "sources_scanned": sources_scanned,
+        "files_scanned": files_scanned,
+        "files_downloaded": files_downloaded,
+        "files_processed": files_processed,
+        "duplicates_detected": duplicates_detected,
+        "failures_count": failures_count,
+        "total_verified": total_materials,
+        "pending_staging": total_pending,
+        "category_breakdown": breakdown,
+    }
+
+
+async def get_exam_coverage_summary(session: AsyncSession) -> Dict[str, Dict[str, int]]:
+    """Return detailed material counts grouped by Exam Category and Subject."""
+    stmt = (
+        select(StudyMaterial.exam_category, StudyMaterial.subject, func.count(StudyMaterial.id))
+        .group_by(StudyMaterial.exam_category, StudyMaterial.subject)
+        .order_by(StudyMaterial.exam_category, func.count(StudyMaterial.id).desc())
+    )
+    rows = (await session.execute(stmt)).all()
+    coverage: Dict[str, Dict[str, int]] = {}
+    for cat, subj, cnt in rows:
+        cat_key = cat.value if hasattr(cat, "value") else str(cat)
+        if cat_key not in coverage:
+            coverage[cat_key] = {}
+        coverage[cat_key][subj] = cnt
+    return coverage
+

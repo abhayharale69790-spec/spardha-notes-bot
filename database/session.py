@@ -106,9 +106,31 @@ async def get_session() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
+from sqlalchemy import text
+
+
 async def init_db() -> None:
-    """Initialize database tables using metadata."""
+    """Initialize database tables using metadata and apply schema migrations."""
     logger.info(f"Initializing database schema on {db_url.split('@')[-1] if '@' in db_url else db_url}...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    logger.info("Database schema initialized.")
+
+        # Apply non-destructive column additions for SQLite and PostgreSQL
+        migration_statements = [
+            "ALTER TABLE study_materials ADD COLUMN topic VARCHAR(200) DEFAULT 'General'",
+            "ALTER TABLE study_materials ADD COLUMN language VARCHAR(50) DEFAULT 'Marathi'",
+            "ALTER TABLE study_materials ADD COLUMN source_name VARCHAR(200) DEFAULT 'Official Portal'",
+            "ALTER TABLE study_materials ADD COLUMN content_hash VARCHAR(64)",
+            "ALTER TABLE study_materials ADD COLUMN extracted_text TEXT",
+            "ALTER TABLE study_materials ADD COLUMN quality_score INTEGER DEFAULT 100",
+            "ALTER TABLE study_materials ADD COLUMN status VARCHAR(50) DEFAULT 'VERIFIED'",
+        ]
+        for stmt in migration_statements:
+            try:
+                await conn.execute(text(stmt))
+            except Exception:
+                # Column already exists
+                pass
+
+    logger.info("Database schema initialized and verified.")
+
