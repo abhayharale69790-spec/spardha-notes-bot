@@ -648,10 +648,21 @@ async def get_all_active_telegram_channels(session: AsyncSession) -> Sequence[Te
     return res.scalars().all()
 
 
+async def get_telegram_channel_by_id(
+    session: AsyncSession,
+    channel_id: int,
+) -> Optional[TelegramChannelSource]:
+    """Look up registered channel by Telegram channel_id."""
+    stmt = select(TelegramChannelSource).where(TelegramChannelSource.channel_id == channel_id)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
 async def get_telegram_channel_by_username(
     session: AsyncSession,
     username: str,
 ) -> Optional[TelegramChannelSource]:
+
     """Look up registered channel by username (without @)."""
     clean_u = username.strip().replace("@", "").lower()
     stmt = select(TelegramChannelSource).where(func.lower(TelegramChannelSource.channel_username) == clean_u)

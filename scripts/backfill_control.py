@@ -81,8 +81,10 @@ async def start_job(per_channel_limit: int = 50):
         try: STOP_FILE.unlink()
         except Exception: pass
 
-    python_exe = sys.executable
+    venv_py = Path(__file__).resolve().parent.parent / ".venv" / "Scripts" / "python.exe"
+    python_exe = str(venv_py) if venv_py.exists() else sys.executable
     daemon_script = str(Path("workers/backfill_daemon.py").resolve())
+
 
     print("=" * 135)
     print(" 🚀 LAUNCHING DETACHED RESUMABLE MASS BACKFILL WORKER")
@@ -93,17 +95,20 @@ async def start_job(per_channel_limit: int = 50):
     if sys.platform == "win32":
         flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
 
-    # Spawn fully detached process
+    # Spawn fully detached process with log file redirection
+    LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+    log_f = open(LOG_FILE, "a", encoding="utf-8")
     proc = subprocess.Popen(
         [python_exe, daemon_script],
         cwd=str(Path(__file__).resolve().parent.parent),
         creationflags=flags,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        stdout=log_f,
+        stderr=log_f,
         close_fds=True,
     )
 
     print(f"📡 Worker process spawned (OS PID: {proc.pid}). Waiting for initialization...")
+
 
     # Wait up to 5 seconds to verify startup & DB registration
     verified = False
