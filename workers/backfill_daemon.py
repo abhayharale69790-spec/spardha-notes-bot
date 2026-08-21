@@ -194,9 +194,17 @@ class BackfillDaemon:
                     authorization_status=ChannelAuthStatus.AUTHORIZED,
                 )
 
+        # Verify explicit redistribution authorization
+        if not getattr(source, "redistribution_authorized", True) or source.authorization_status != ChannelAuthStatus.AUTHORIZED:
+            logger.warning(f"🚫 Skipping channel {channel_name}: Redistribution not authorized.")
+            async with get_session() as session:
+                await crud.fail_backfill_task(session, task.id, "Redistribution not authorized")
+            return 0
+
         client = telegram_user_collector.client
         if not client or not client.is_connected():
             return 0
+
 
         entity = task.channel_username or task.channel_id
         ingested_in_task = 0

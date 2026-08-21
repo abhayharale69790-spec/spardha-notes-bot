@@ -404,13 +404,18 @@ class TelegramUserCollector:
         for s in sources:
             if not s.is_active:
                 continue
+            # Exclude frozen/historical-only archives from continuous NewMessage event polling
+            if getattr(s, "monitoring_mode", "CONTINUOUS") == "HISTORICAL_ONLY":
+                logger.info(f"⏳ Skipping live continuous event registration for HISTORICAL_ONLY archive: {s.title} (@{s.channel_username})")
+                continue
             entity_key = s.channel_username or s.channel_id
             channel_map[str(s.channel_id)] = s
             if s.channel_username:
                 channel_map[s.channel_username.lower()] = s
             chat_entities.append(entity_key)
 
-        logger.info(f"📡 Subscribing live event listener to {len(chat_entities)} approved Telegram channels...")
+        logger.info(f"📡 Subscribing live event listener to {len(chat_entities)} continuous-monitoring Telegram channels...")
+
 
         @self.client.on(events.NewMessage(chats=chat_entities))
         async def on_new_channel_message(event):

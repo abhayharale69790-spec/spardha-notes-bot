@@ -126,9 +126,13 @@ async def init_db() -> None:
             "ALTER TABLE study_materials ADD COLUMN page_count INTEGER DEFAULT 1",
             "ALTER TABLE study_materials ADD COLUMN content_hash VARCHAR(64)",
             "ALTER TABLE study_materials ADD COLUMN extracted_text TEXT",
-            "ALTER TABLE study_materials ADD COLUMN quality_score INTEGER DEFAULT 100",
             "ALTER TABLE study_materials ADD COLUMN status VARCHAR(50) DEFAULT 'VERIFIED'",
+            "ALTER TABLE telegram_channel_sources ADD COLUMN redistribution_authorized BOOLEAN DEFAULT 1",
+            "ALTER TABLE telegram_channel_sources ADD COLUMN monitoring_mode VARCHAR(50) DEFAULT 'CONTINUOUS'",
+            "ALTER TABLE backfill_channel_tasks ADD COLUMN redistribution_authorized BOOLEAN DEFAULT 1",
+            "ALTER TABLE backfill_channel_tasks ADD COLUMN monitoring_mode VARCHAR(50) DEFAULT 'CONTINUOUS'",
         ]
+
 
         for stmt in migration_statements:
             try:

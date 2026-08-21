@@ -21,6 +21,8 @@ class ApprovedChannelConfig:
     title: str
     exam_category: ExamCategory
     authorization_status: ChannelAuthStatus = ChannelAuthStatus.AUTHORIZED
+    redistribution_authorized: bool = True
+    monitoring_mode: str = "CONTINUOUS"  # "CONTINUOUS" or "HISTORICAL_ONLY"
     description: str = ""
 
 
@@ -33,6 +35,8 @@ DEFAULT_APPROVED_CHANNELS: List[ApprovedChannelConfig] = [
         title="Spardha Notes Hub (Official Community)",
         exam_category=ExamCategory.GENERAL,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
+        redistribution_authorized=True,
+        monitoring_mode="CONTINUOUS",
         description="Official publication channel for Harale Digital Study Point",
     ),
 
@@ -43,7 +47,11 @@ DEFAULT_APPROVED_CHANNELS: List[ApprovedChannelConfig] = [
         title="📎MPSC Study Campus",
         exam_category=ExamCategory.MPSC,
         authorization_status=ChannelAuthStatus.AUTHORIZED,
+        redistribution_authorized=True,
+        monitoring_mode="HISTORICAL_ONLY",  # Frozen after msg #1803 (March 2021)
+        description="Historical MPSC Study Notes Archive",
     ),
+
     ApprovedChannelConfig(
         channel_id=-1001589412302,
         channel_username="MPSCHistory",
@@ -235,6 +243,8 @@ class TelegramChannelRegistry:
                 title=cfg.title,
                 exam_category=cfg.exam_category,
                 authorization_status=cfg.authorization_status,
+                redistribution_authorized=cfg.redistribution_authorized,
+                monitoring_mode=cfg.monitoring_mode,
             )
             sources.append(ch)
         logger.info(f"Initialized {len(sources)} default approved Telegram channel sources.")
@@ -251,6 +261,8 @@ class TelegramChannelRegistry:
         channel_username: Optional[str],
         title: str,
         exam_category: ExamCategory,
+        redistribution_authorized: bool = True,
+        monitoring_mode: str = "CONTINUOUS",
     ) -> TelegramChannelSource:
         """Register or authorize a new educational channel."""
         ch = await crud.get_or_create_telegram_channel(
@@ -260,9 +272,12 @@ class TelegramChannelRegistry:
             title=title,
             exam_category=exam_category,
             authorization_status=ChannelAuthStatus.AUTHORIZED,
+            redistribution_authorized=redistribution_authorized,
+            monitoring_mode=monitoring_mode,
         )
-        logger.info(f"Authorized Telegram channel '{title}' (@{channel_username}) for #{exam_category.value}.")
+        logger.info(f"Authorized Telegram channel '{title}' (@{channel_username}) for #{exam_category.value} (mode={monitoring_mode}).")
         return ch
+
 
 
 telegram_channel_registry = TelegramChannelRegistry()

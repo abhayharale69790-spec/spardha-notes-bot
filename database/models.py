@@ -168,6 +168,8 @@ class TelegramChannelSource(Base):
     total_messages_scanned: Mapped[int] = mapped_column(Integer, default=0)
     total_pdfs_downloaded: Mapped[int] = mapped_column(Integer, default=0)
     total_verified: Mapped[int] = mapped_column(Integer, default=0)
+    redistribution_authorized: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    monitoring_mode: Mapped[str] = mapped_column(String(50), default="CONTINUOUS", nullable=False, index=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -182,7 +184,8 @@ class TelegramChannelSource(Base):
     )
 
     def __repr__(self) -> str:
-        return f"<TelegramChannelSource(id={self.id}, username='@{self.channel_username}', title='{self.title}', status='{self.authorization_status}')>"
+        return f"<TelegramChannelSource(id={self.id}, username='@{self.channel_username}', title='{self.title}', mode='{self.monitoring_mode}', status='{self.authorization_status}')>"
+
 
 
 class StagingQueue(Base):
@@ -332,11 +335,14 @@ class BackfillChannelTask(Base):
     last_successful_msg_id: Mapped[int] = mapped_column(Integer, default=0)
     messages_scanned: Mapped[int] = mapped_column(Integer, default=0)
     pdfs_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    redistribution_authorized: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    monitoring_mode: Mapped[str] = mapped_column(String(50), default="CONTINUOUS", nullable=False)
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
 
     def __repr__(self) -> str:
-        return f"<BackfillChannelTask(id={self.id}, job_id={self.job_id}, channel='@{self.channel_username}', status='{self.status}', ingested={self.pdfs_ingested})>"
+        return f"<BackfillChannelTask(id={self.id}, job_id={self.job_id}, channel='@{self.channel_username}', mode='{self.monitoring_mode}', status='{self.status}', ingested={self.pdfs_ingested})>"
+
 

@@ -608,14 +608,25 @@ async def get_or_create_telegram_channel(
     title: str,
     exam_category: ExamCategory = ExamCategory.GENERAL,
     authorization_status: ChannelAuthStatus = ChannelAuthStatus.AUTHORIZED,
+    redistribution_authorized: bool = True,
+    monitoring_mode: str = "CONTINUOUS",
 ) -> TelegramChannelSource:
     """Fetch existing registered Telegram channel or create new approved source."""
     stmt = select(TelegramChannelSource).where(TelegramChannelSource.channel_id == channel_id)
     res = await session.execute(stmt)
     existing = res.scalar_one_or_none()
     if existing:
+        changed = False
         if channel_username and existing.channel_username != channel_username:
             existing.channel_username = channel_username
+            changed = True
+        if existing.redistribution_authorized != redistribution_authorized:
+            existing.redistribution_authorized = redistribution_authorized
+            changed = True
+        if existing.monitoring_mode != monitoring_mode:
+            existing.monitoring_mode = monitoring_mode
+            changed = True
+        if changed:
             await session.commit()
             await session.refresh(existing)
         return existing
@@ -626,12 +637,15 @@ async def get_or_create_telegram_channel(
         title=title,
         exam_category=exam_category,
         authorization_status=authorization_status,
+        redistribution_authorized=redistribution_authorized,
+        monitoring_mode=monitoring_mode,
         is_active=True,
     )
     session.add(new_channel)
     await session.commit()
     await session.refresh(new_channel)
     return new_channel
+
 
 
 async def get_all_active_telegram_channels(session: AsyncSession) -> Sequence[TelegramChannelSource]:
@@ -878,11 +892,14 @@ async def create_backfill_channel_tasks(
             last_successful_msg_id=ch.last_scanned_msg_id or 0,
             messages_scanned=0,
             pdfs_ingested=0,
+            redistribution_authorized=getattr(ch, "redistribution_authorized", True),
+            monitoring_mode=getattr(ch, "monitoring_mode", "CONTINUOUS"),
         )
         session.add(task)
         tasks.append(task)
     await session.commit()
     return tasks
+
 
 
 async def get_backfill_tasks_for_job(
