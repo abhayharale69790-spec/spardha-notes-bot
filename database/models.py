@@ -8,11 +8,13 @@ from sqlalchemy import (
     BigInteger,
     DateTime,
     Enum as SAEnum,
+    ForeignKey,
     Integer,
     String,
     Text,
     Index,
 )
+
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -254,3 +256,87 @@ class IngestionMetric(Base):
 
     def __repr__(self) -> str:
         return f"<IngestionMetric(id={self.id}, source='{self.source_name}', processed={self.files_processed}, status='{self.status}')>"
+
+
+class BackfillJobStatus(str, enum.Enum):
+    """Lifecycle status of a detached mass backfill batch job."""
+    PENDING = "PENDING"
+    RUNNING = "RUNNING"
+    PAUSED = "PAUSED"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    CANCELLED = "CANCELLED"
+
+
+class BackfillTaskStatus(str, enum.Enum):
+    """Checkpoint and execution status of a single channel within a backfill job."""
+    PENDING = "PENDING"
+    IN_PROGRESS = "IN_PROGRESS"
+    COMPLETED = "COMPLETED"
+    FAILED = "FAILED"
+    SKIPPED = "SKIPPED"
+
+
+class BackfillJob(Base):
+    """Persistent job state for mass Telegram harvesting operations."""
+
+    __tablename__ = "backfill_jobs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_uuid: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
+    status: Mapped[BackfillJobStatus] = mapped_column(
+        SAEnum(BackfillJobStatus, native_enum=False),
+        default=BackfillJobStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    total_channels: Mapped[int] = mapped_column(Integer, default=0)
+    completed_channels: Mapped[int] = mapped_column(Integer, default=0)
+    total_scanned: Mapped[int] = mapped_column(Integer, default=0)
+    total_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    total_errors: Mapped[int] = mapped_column(Integer, default=0)
+    worker_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    heartbeat_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    config_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<BackfillJob(id={self.id}, uuid='{self.job_uuid}', status='{self.status}', ingested={self.total_ingested})>"
+
+
+class BackfillChannelTask(Base):
+    """Per-channel task checkpoint and progress tracking for a backfill job."""
+
+    __tablename__ = "backfill_channel_tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    job_id: Mapped[int] = mapped_column(Integer, ForeignKey("backfill_jobs.id", ondelete="CASCADE"), index=True, nullable=False)
+    channel_id: Mapped[int] = mapped_column(BigInteger, index=True, nullable=False)
+    channel_username: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    exam_category: Mapped[ExamCategory] = mapped_column(
+        SAEnum(ExamCategory, native_enum=False),
+        default=ExamCategory.GENERAL,
+        nullable=False,
+    )
+    status: Mapped[BackfillTaskStatus] = mapped_column(
+        SAEnum(BackfillTaskStatus, native_enum=False),
+        default=BackfillTaskStatus.PENDING,
+        nullable=False,
+        index=True,
+    )
+    last_successful_msg_id: Mapped[int] = mapped_column(Integer, default=0)
+    messages_scanned: Mapped[int] = mapped_column(Integer, default=0)
+    pdfs_ingested: Mapped[int] = mapped_column(Integer, default=0)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, onupdate=utc_now, nullable=False)
+
+    def __repr__(self) -> str:
+        return f"<BackfillChannelTask(id={self.id}, job_id={self.job_id}, channel='@{self.channel_username}', status='{self.status}', ingested={self.pdfs_ingested})>"
+

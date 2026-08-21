@@ -339,7 +339,7 @@ class TelegramUserCollector:
 
                     if mime == "application/pdf" or fname.lower().endswith(".pdf"):
                         doc_size = getattr(msg.document, "size", 0)
-                        if doc_size > 35 * 1024 * 1024:
+                        if doc_size > 15 * 1024 * 1024:
                             logger.info(f"⏭️ Skipping oversized PDF ({doc_size / (1024*1024):.1f} MB) from msg #{msg.id}")
                             continue
 
@@ -350,8 +350,9 @@ class TelegramUserCollector:
                         try:
                             dl_result = await asyncio.wait_for(
                                 self.client.download_media(msg, file=str(raw_target)),
-                                timeout=45.0,
+                                timeout=30.0,
                             )
+
                             if dl_result and raw_target.exists():
                                 raw_bytes = raw_target.read_bytes()
                                 res = await self.process_document_bytes(
@@ -368,6 +369,11 @@ class TelegramUserCollector:
                             logger.warning(f"⚠️ Timeout downloading document from msg #{msg.id}, skipping.")
                         except Exception as e_dl:
                             logger.warning(f"⚠️ Error downloading msg #{msg.id}: {e_dl}")
+                        finally:
+                            if raw_target.exists():
+                                try: raw_target.unlink()
+                                except Exception: pass
+
 
             return ingested_count
 

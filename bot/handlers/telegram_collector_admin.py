@@ -240,3 +240,76 @@ async def handle_telegram_discovered_command(message: Message, command: CommandO
     lines.append("💡 <i>मंजूर करण्यासाठी <code>/telegram_backfill &lt;channel&gt;</code> किंवा ऍडमिन पॅनेल वापरा.</i>")
     await message.reply("\n".join(lines), parse_mode="HTML")
 
+
+@telegram_collector_admin_router.message(Command("backfill_status", "tg_backfill_status"), IsAdminFilter())
+async def handle_backfill_status_command(message: Message) -> None:
+    """Display real-time mass backfill daemon state, job progress, and checkpoints."""
+    from scripts.backfill_control import get_active_worker_pid
+    active_pid = get_active_worker_pid()
+    pid_status = f"🟢 <b>RUNNING</b> (PID: <code>{active_pid}</code>)" if active_pid else "🔴 <b>STOPPED / IDLE</b>"
+
+    async with get_session() as session:
+        job = await crud.get_latest_backfill_job(session)
+        tasks = await crud.get_backfill_tasks_for_job(session, job.id) if job else []
+        mat_res = await session.execute(select(StudyMaterial))
+        total_materials = len(mat_res.scalars().all())
+
+    if not job:
+        await message.reply("ℹ️ कोणतेही बॅकफिल जॉब सुरू नाही. सुरू करण्यासाठी <code>/backfill_start</code> वापरा.", parse_mode="HTML")
+        return
+
+    heartbeat_str = job.heartbeat_at.strftime("%H:%M:%S UTC") if job.heartbeat_at else "Never"
+    status_text = (
+        f"⚙️ <b>Mass Backfill Daemon Job Telemetry</b>\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📡 <b>Worker State:</b> {pid_status}\n"
+        f"📋 <b>Job UUID:</b> <code>{job.job_uuid}</code> (#{job.id})\n"
+        f"🔄 <b>Job Status:</b> <code>{job.status.value}</code>\n"
+        f"💓 <b>Heartbeat:</b> <code>{heartbeat_str}</code>\n"
+        f"📊 <b>Channels Completed:</b> <b>{job.completed_channels} / {job.total_channels}</b>\n"
+        f"📄 <b>Messages Scanned:</b> <code>{job.total_scanned}</code>\n"
+        f"📥 <b>Verified PDFs Ingested:</b> <b>+{job.total_ingested}</b>\n"
+        f"🏛️ <b>Total DB Verified PDFs:</b> <b>{total_materials}</b>\n"
+    )
+
+    if tasks:
+        status_text += "\n<b>Recent Channel Tasks:</b>\n"
+        for t in tasks[:8]:
+            uname = f"@{t.channel_username}" if t.channel_username else f"ID {t.channel_id}"
+            icon = "✅" if t.status.value == "COMPLETED" else ("⏳" if t.status.value == "IN_PROGRESS" else "⚪")
+            status_text += f"{icon} <code>{uname}</code> (+{t.pdfs_ingested} PDFs, #{t.last_successful_msg_id})\n"
+
+    status_text += "\n💡 <i>नियंत्रण: <code>/backfill_start</code> | <code>/backfill_pause</code> | <code>/backfill_resume</code></i>"
+    await message.reply(status_text, parse_mode="HTML")
+
+
+@telegram_collector_admin_router.message(Command("backfill_start", "tg_backfill_start"), IsAdminFilter())
+async def handle_backfill_start_command(message: Message) -> None:
+    """Launch detached background backfill daemon from Telegram."""
+    from scripts.backfill_control import start_job, get_active_worker_pid
+    active_pid = get_active_worker_pid()
+    if active_pid:
+        await message.reply(f"⚠️ बॅकफिल वर्कर आधीच कार्यरत आहे (Worker already running on PID: <code>{active_pid}</code>).", parse_mode="HTML")
+        return
+
+    await message.reply("🚀 <b>Detached Mass Backfill Daemon सुरू करत आहे...</b>", parse_mode="HTML")
+    await start_job()
+    await handle_backfill_status_command(message)
+
+
+@telegram_collector_admin_router.message(Command("backfill_pause", "tg_backfill_pause"), IsAdminFilter())
+async def handle_backfill_pause_command(message: Message) -> None:
+    """Pause the active backfill daemon gracefully."""
+    from scripts.backfill_control import pause_job
+    await pause_job()
+    await message.reply("⏸️ <b>Mass Backfill Daemon ला थाबंण्याचा सिग्नल दिला आहे (Job Paused).</b>", parse_mode="HTML")
+
+
+@telegram_collector_admin_router.message(Command("backfill_resume", "tg_backfill_resume"), IsAdminFilter())
+async def handle_backfill_resume_command(message: Message) -> None:
+    """Resume paused backfill daemon."""
+    from scripts.backfill_control import start_job
+    await start_job()
+    await message.reply("▶️ <b>Mass Backfill Daemon पुन्हा सुरू केले आहे (Job Resumed).</b>", parse_mode="HTML")
+
+

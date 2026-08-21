@@ -7,6 +7,10 @@ from sqlalchemy import distinct, func, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
+    BackfillChannelTask,
+    BackfillJob,
+    BackfillJobStatus,
+    BackfillTaskStatus,
     ChannelAuthStatus,
     ExamCategory,
     MaterialType,
@@ -18,6 +22,7 @@ from database.models import (
     IngestionMetric,
     utc_now,
 )
+
 
 
 from search_engine.hybrid_search import rank_hybrid_materials
@@ -735,6 +740,243 @@ async def update_channel_auth_status(
     res = await session.execute(stmt)
     await session.commit()
     return res.scalar_one_or_none()
+
+
+# =========================================================================
+# Backfill Job & Checkpointing CRUD Operations
+# =========================================================================
+
+async def create_backfill_job(
+    session: AsyncSession,
+    job_uuid: str,
+    total_channels: int,
+    config_json: Optional[str] = None,
+    worker_pid: Optional[int] = None,
+) -> BackfillJob:
+    """Create and persist a new mass backfill job."""
+    job = BackfillJob(
+        job_uuid=job_uuid,
+        status=BackfillJobStatus.RUNNING,
+        total_channels=total_channels,
+        completed_channels=0,
+        total_scanned=0,
+        total_ingested=0,
+        total_errors=0,
+        worker_pid=worker_pid,
+        heartbeat_at=utc_now(),
+        started_at=utc_now(),
+        config_json=config_json,
+    )
+    session.add(job)
+    await session.commit()
+    await session.refresh(job)
+    return job
+
+
+async def get_active_backfill_job(session: AsyncSession) -> Optional[BackfillJob]:
+    """Fetch the latest active or paused backfill job."""
+    stmt = (
+        select(BackfillJob)
+        .where(BackfillJob.status.in_([BackfillJobStatus.RUNNING, BackfillJobStatus.PAUSED, BackfillJobStatus.PENDING]))
+        .order_by(BackfillJob.id.desc())
+        .limit(1)
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def get_latest_backfill_job(session: AsyncSession) -> Optional[BackfillJob]:
+    """Fetch the most recent backfill job regardless of status."""
+    stmt = select(BackfillJob).order_by(BackfillJob.id.desc()).limit(1)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def get_backfill_job_by_uuid(session: AsyncSession, job_uuid: str) -> Optional[BackfillJob]:
+    """Fetch backfill job by unique UUID."""
+    stmt = select(BackfillJob).where(BackfillJob.job_uuid == job_uuid)
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def update_backfill_job_status(
+    session: AsyncSession,
+    job_id: int,
+    status: BackfillJobStatus,
+    worker_pid: Optional[int] = None,
+    error_message: Optional[str] = None,
+) -> Optional[BackfillJob]:
+    """Update lifecycle status of a backfill job."""
+    stmt = select(BackfillJob).where(BackfillJob.id == job_id)
+    res = await session.execute(stmt)
+    job = res.scalar_one_or_none()
+    if job:
+        job.status = status
+        if worker_pid is not None:
+            job.worker_pid = worker_pid
+        if error_message:
+            job.error_message = error_message
+        if status in [BackfillJobStatus.COMPLETED, BackfillJobStatus.FAILED, BackfillJobStatus.CANCELLED]:
+            job.completed_at = utc_now()
+        job.updated_at = utc_now()
+        job.heartbeat_at = utc_now()
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+    return job
+
+
+async def update_backfill_job_heartbeat(
+    session: AsyncSession,
+    job_id: int,
+    scanned_delta: int = 0,
+    ingested_delta: int = 0,
+    errors_delta: int = 0,
+) -> Optional[BackfillJob]:
+    """Update job heartbeat and progress counts."""
+    stmt = select(BackfillJob).where(BackfillJob.id == job_id)
+    res = await session.execute(stmt)
+    job = res.scalar_one_or_none()
+    if job:
+        job.heartbeat_at = utc_now()
+        job.total_scanned += scanned_delta
+        job.total_ingested += ingested_delta
+        job.total_errors += errors_delta
+        job.updated_at = utc_now()
+        session.add(job)
+        await session.commit()
+        await session.refresh(job)
+    return job
+
+
+async def create_backfill_channel_tasks(
+    session: AsyncSession,
+    job_id: int,
+    channels: Sequence[TelegramChannelSource],
+) -> List[BackfillChannelTask]:
+    """Create individual channel tasks with existing checkpoints for a job."""
+    tasks: List[BackfillChannelTask] = []
+    for ch in channels:
+        task = BackfillChannelTask(
+            job_id=job_id,
+            channel_id=ch.channel_id,
+            channel_username=ch.channel_username,
+            title=ch.title,
+            exam_category=ch.exam_category,
+            status=BackfillTaskStatus.PENDING,
+            last_successful_msg_id=ch.last_scanned_msg_id or 0,
+            messages_scanned=0,
+            pdfs_ingested=0,
+        )
+        session.add(task)
+        tasks.append(task)
+    await session.commit()
+    return tasks
+
+
+async def get_backfill_tasks_for_job(
+    session: AsyncSession,
+    job_id: int,
+) -> List[BackfillChannelTask]:
+    """Fetch all channel tasks belonging to a job."""
+    stmt = select(BackfillChannelTask).where(BackfillChannelTask.job_id == job_id).order_by(BackfillChannelTask.id.asc())
+    res = await session.execute(stmt)
+    return list(res.scalars().all())
+
+
+async def get_next_pending_backfill_task(
+    session: AsyncSession,
+    job_id: int,
+) -> Optional[BackfillChannelTask]:
+    """Fetch the next pending or in-progress channel task for a job."""
+    stmt = (
+        select(BackfillChannelTask)
+        .where(
+            BackfillChannelTask.job_id == job_id,
+            BackfillChannelTask.status.in_([BackfillTaskStatus.PENDING, BackfillTaskStatus.IN_PROGRESS]),
+        )
+        .order_by(BackfillChannelTask.id.asc())
+        .limit(1)
+    )
+    res = await session.execute(stmt)
+    return res.scalar_one_or_none()
+
+
+async def update_backfill_task_progress(
+    session: AsyncSession,
+    task_id: int,
+    last_successful_msg_id: int,
+    scanned_delta: int = 0,
+    ingested_delta: int = 0,
+) -> Optional[BackfillChannelTask]:
+    """Update checkpoint and progress for an active channel task."""
+    stmt = select(BackfillChannelTask).where(BackfillChannelTask.id == task_id)
+    res = await session.execute(stmt)
+    task = res.scalar_one_or_none()
+    if task:
+        task.status = BackfillTaskStatus.IN_PROGRESS
+        if task.started_at is None:
+            task.started_at = utc_now()
+        task.last_successful_msg_id = max(task.last_successful_msg_id, last_successful_msg_id)
+        task.messages_scanned += scanned_delta
+        task.pdfs_ingested += ingested_delta
+        task.updated_at = utc_now()
+        session.add(task)
+        await session.commit()
+        await session.refresh(task)
+    return task
+
+
+async def complete_backfill_task(
+    session: AsyncSession,
+    task_id: int,
+    scanned_total: int,
+    ingested_total: int,
+) -> Optional[BackfillChannelTask]:
+    """Mark a channel task as successfully completed."""
+    stmt = select(BackfillChannelTask).where(BackfillChannelTask.id == task_id)
+    res = await session.execute(stmt)
+    task = res.scalar_one_or_none()
+    if task:
+        task.status = BackfillTaskStatus.COMPLETED
+        task.messages_scanned = scanned_total
+        task.pdfs_ingested = ingested_total
+        task.completed_at = utc_now()
+        task.updated_at = utc_now()
+        session.add(task)
+
+        # Update parent job completed_channels count
+        job_stmt = select(BackfillJob).where(BackfillJob.id == task.job_id)
+        job_res = await session.execute(job_stmt)
+        job = job_res.scalar_one_or_none()
+        if job:
+            job.completed_channels += 1
+            job.updated_at = utc_now()
+            session.add(job)
+
+        await session.commit()
+        await session.refresh(task)
+    return task
+
+
+async def fail_backfill_task(
+    session: AsyncSession,
+    task_id: int,
+    error_message: str,
+) -> Optional[BackfillChannelTask]:
+    """Mark a channel task as failed with error details."""
+    stmt = select(BackfillChannelTask).where(BackfillChannelTask.id == task_id)
+    res = await session.execute(stmt)
+    task = res.scalar_one_or_none()
+    if task:
+        task.status = BackfillTaskStatus.FAILED
+        task.error_message = error_message
+        task.updated_at = utc_now()
+        session.add(task)
+        await session.commit()
+        await session.refresh(task)
+    return task
+
 
 
 
